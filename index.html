@@ -1,5 +1,5 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>2만분의 1 데모</title>
+<title>2만분의 1</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* 레이아웃: 상단 탭 + 단일 작업 영역. 영수증(감열지)은 어느 테마에서나 종이색 고정 */
@@ -187,12 +187,12 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
 </style>
 
 <header><div class="wrap">
-  <div class="brand"><h1><b>2만분의 1</b> 부스 데모</h1><span>2026 인권주간 · 민주광장 11.12 · 프로토타입</span></div>
+  <div class="brand"><h1><b>2만분의 1</b></h1><span>2026 인권주간 · 민주광장 11.12</span></div>
   <nav role="tablist" id="tabs">
     <button role="tab" data-v="birth" aria-selected="true">① 출생 (스타팅)</button>
     <button role="tab" data-v="station" aria-selected="false">② 단계 스테이션</button>
     <button role="tab" data-v="ending" aria-selected="false">③ 엔딩존</button>
-    <button role="tab" data-v="bank" aria-selected="false">시나리오 뱅크 · AI 검증</button>
+    <button role="tab" data-v="bank" aria-selected="false">시나리오 뱅크</button>
     <button role="tab" data-v="plan" aria-selected="false">설계안</button>
   </nav>
 </div></header>
@@ -203,16 +203,14 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
   <div class="grid2">
     <div class="stack">
       <h2>태어나기</h2>
-      <p class="lead">버튼을 누르면 무작위 출생 속성이 정해지고 영수증이 출력됩니다. 영수증 ID 하나에 모든 속성이 들어 있어서, 어느 기기에서 열어도 같은 사람이 됩니다.</p>
       <div class="row"><span class="note">언어 · Language</span><div class="langbar" role="group" aria-label="언어 선택"></div></div>
       <div class="row" style="align-items:center"><button class="btn primary big" id="bornBtn">태어나기</button>
         <div class="printbox"><button class="btn" id="printBirth">영수증 인쇄</button>
           <label class="switch"><input type="checkbox" class="autoPrint" role="switch"><span class="track" aria-hidden="true"></span><span class="sw-text"><b>자동 인쇄</b><small>태어나면 바로 출력</small></span></label></div></div>
       <div class="row">
-        <button class="btn" id="toStation">이 영수증으로 1단계 시작 (QR 스캔 대신)</button>
+        <button class="btn" id="toStation">이 영수증으로 1단계 시작 (테스트용)</button>
         <button class="btn" id="toBF">한 자리에서 전체 체험 (배리어프리)</button>
       </div>
-      <p class="note">실제 부스에서는 스테이션 폰의 기본 카메라로 영수증 QR을 찍으면 이 사이트가 그 ID로 바로 열립니다. 데모에서는 위 버튼이 스캔을 대신합니다. 출생 조건은 실제 통계(소득 분포, 등록장애인, 다문화 학생 비율 등)를 따르고, 근거는 설계안 탭에 있습니다.</p>
     </div>
     <div id="receipt"></div>
   </div>
@@ -222,7 +220,6 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
   <div class="grid2">
     <div class="stack">
       <h2>단계 스테이션 <span class="tag" id="bfTag" hidden>배리어프리 연속 모드</span></h2>
-      <p class="lead">스탭 폰 화면입니다. 영수증 QR을 찍으면 그 사람의 이전 선택을 기록 서버에서 불러오고, 참가자가 고르면 바로 저장됩니다. 스탭은 찍고, 읽고, 누르기만 하면 됩니다.</p>
       <div class="panel stack">
         <div class="row" style="justify-content:space-between"><span class="note">기록: <b id="syncName">연결 중</b></span><span class="tag" id="syncState">확인 중</span></div>
         <div class="note">시나리오: <b id="scenName">불러오는 중</b></div>
@@ -241,7 +238,7 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
       </div>
       <div class="hist" id="hist"></div>
     </div>
-    <div class="stack" id="eventArea"><div class="panel note">영수증 QR을 찍거나 ID를 넣어 주세요. 출생 탭에서 넘어오면 자동으로 채워집니다.</div></div>
+    <div class="stack" id="eventArea"><div class="panel note">영수증 QR을 찍거나 ID를 넣어 주세요.</div></div>
   </div>
 </section>
 
@@ -249,7 +246,6 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
   <div class="grid2">
     <div class="stack">
       <h2>엔딩존</h2>
-      <p class="lead">영수증 QR만 찍으면 기록 서버에서 네 단계 선택을 불러와 한 사람의 인생을 정리합니다. 같은 상황에서 다른 참가자들이 무엇을 골랐는지도 함께 보여 줍니다.</p>
       <div class="panel stack">
         <label for="eId">영수증 ID<input id="eId" class="mono" autocomplete="off"></label>
         <div class="row"><span class="note">참가자 언어 (QR을 찍으면 자동)</span><div class="langbar" role="group" aria-label="언어 선택"></div></div>
@@ -269,28 +265,24 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
 <section id="v-bank" hidden>
   <div class="panel stack" id="sheetPanel" style="margin-bottom:24px">
     <h2 style="margin:0">시나리오 저장소 (구글 시트)</h2>
-    <p class="note">팀원은 시트에 한 줄씩 쓰고, '검수' 칸이 O인 줄만 게임에 들어갑니다. 문제가 있는 줄은 빠지고 아래에 이유가 나옵니다. 시트를 고친 뒤 '다시 불러오기'를 누르거나 페이지를 새로 열면 반영됩니다.</p>
+    <p class="note">검수 칸이 O인 줄만 게임에 들어갑니다. 시트를 고친 뒤 '다시 불러오기'를 누르세요.</p>
     <div class="row"><a class="btn" id="sheetOpen" target="_blank" rel="noopener">시트 열기</a><button class="btn" id="sheetReload">다시 불러오기</button></div>
     <div class="stats" id="sheetStats"></div>
     <div id="sheetProblems"></div>
   </div>
-  <h2>AI로 시나리오를 늘릴 수 있는가</h2>
-  <p class="lead">시드 12개(팀원이 쓸 자리, 지금은 예시)를 바탕으로 AI가 차별 사유나 행위 주체, 생애 경로를 바꾼 변형을 만들었습니다. 아래 숫자는 이 페이지가 직접 계산합니다. 자동 형식 검사와, 가상 인생 3,000명을 돌려 본 커버리지입니다.</p>
+  <h2>시나리오 통계</h2>
   <div class="stats" id="stats"></div>
-  <h3 style="margin-top:24px">속성별: 자기 속성과 관련된 이벤트를 한 번이라도 만나는 비율</h3>
-  <p class="note">시드만 있을 때와 AI 변형을 더했을 때를 비교합니다. 시드가 다루지 못한 사람들(성소수자, 한부모·시설, 비수도권, 남성 육아, 살면서 이주하거나 이주민 가족이 된 사람)에게 자기 이야기가 생기는지를 봅니다. 속성은 한 번이라도 그 상태였던 인생 기준입니다.</p>
+  <h3 style="margin-top:24px">속성별로 자기 이야기를 만나는 비율</h3>
   <div class="tablewrap"><table id="covTable"></table></div>
   <h3 style="margin-top:24px">단계 × 차별 사유 지도</h3>
   <div class="tablewrap"><table id="mapTable"></table></div>
   <h3 style="margin-top:24px">엔딩 한마디 문장 은행</h3>
-  <p class="note">API 없이 쓰는 기본 문장입니다. 고른 행동의 흐름에 따라 삶 전체를 한 문장으로 요약합니다. 행사 전에 전부 검수할 수 있습니다.</p>
   <div class="tablewrap"><table id="lineBank"></table></div>
   <h3 style="margin-top:24px">이벤트 목록</h3>
   <div class="row" style="margin-bottom:10px">
     <label for="fStage">단계<select id="fStage"><option value="0">전체</option><option value="1">1 청소년기</option><option value="2">2 청년기</option><option value="3">3 중장년기</option><option value="4">4 노년기</option></select></label>
   </div>
   <div class="evgroup" id="evList"></div>
-  <p class="note" style="margin-top:14px">AI 변형은 이 데모를 위해 Claude가 위 시드를 바탕으로 생성한 초안입니다. 법 조항·표현은 팀 검수 전입니다.</p>
 </section>
 
 <section id="v-plan" hidden><div class="prose" id="planBody"></div></section>
@@ -1784,7 +1776,7 @@ const timeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout((
 const Store = {
   kind: "local", name: "이 기기 안에만 (테스트용)", db: null,
   async init(){
-    try { if (window.claude && window.claude.use) { const db = await window.claude.use("db"); if (db) { this.db = db; this.kind = "artifact"; this.name = "공유 기록 서버 (데모)"; } } } catch(e){}
+    try { if (window.claude && window.claude.use) { const db = await window.claude.use("db"); if (db) { this.db = db; this.kind = "artifact"; this.name = "공유 기록 서버"; } } } catch(e){}
     if (this.kind === "local" && FIREBASE_URL) { this.kind = "firebase"; this.name = "Firebase 실시간 DB"; }
     renderSync(); this.flush();
   },
@@ -2030,8 +2022,8 @@ function casesHtml(ev){
 
 // ---------- 카메라 QR 스캔 ----------
 // 휴대폰 카메라로 영수증 QR을 읽는다. 실시간 카메라가 안 되면(권한 거부, 일부 앱 화면) '사진으로 찍기'로 대신한다.
-// 2MAN:MZJ-JAX (새 영수증), 예전 주소형 #r-MZJJAX, ID만 있는 글자 모두 읽는다
-function parseQR(t){ t = String(t || "").trim(); const m = /^2MAN:\s*([0-9A-Za-z]{3}-?[0-9A-Za-z]{3})$/i.exec(t) || /r-([0-9A-Za-z]{6})/.exec(t) || /^([0-9A-Za-z]{3}-?[0-9A-Za-z]{3})$/.exec(t); return m ? normId(m[1]) : null; }
+// 영수증 QR(2MAN:MZJ-JAX) 또는 ID 글자만 읽는다
+function parseQR(t){ t = String(t || "").trim(); const m = /^2MAN:\s*([0-9A-Za-z]{3}-?[0-9A-Za-z]{3})$/i.exec(t) || /^([0-9A-Za-z]{3}-?[0-9A-Za-z]{3})$/.exec(t); return m ? normId(m[1]) : null; }
 const Scanner = {
   stream: null, timer: 0, cb: null, run: 0, det: null,
   async open(cb){
@@ -2285,7 +2277,6 @@ born(null, false); bfMode = $("#sStage").value === "0";
 Store.init();
 // 시나리오는 시트에서 받아 온 뒤에 쓰기 시작 (스테이션·엔딩은 이걸 기다림)
 const scenReady = Scenarios.load().then(() => { bankDone = false; renderSheet(); if (!$("#v-bank").hidden) renderBank(); });
-// 예전 주소형 QR(#r-ID)로 들어와도 스테이션을 열지 않는다 (참가자 혼자 진행 방지)
 { let t = null; try { t = localStorage.getItem("2man-tab"); } catch(e){} if (t && $("#v-" + t)) show(t); }
 })();
 

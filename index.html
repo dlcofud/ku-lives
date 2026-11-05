@@ -193,6 +193,7 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
       <p class="lead">스탭 폰 화면입니다. 영수증 QR을 찍으면 그 사람의 이전 선택을 기록 서버에서 불러오고, 참가자가 고르면 바로 저장됩니다. 스탭은 찍고, 읽고, 누르기만 하면 됩니다.</p>
       <div class="panel stack">
         <div class="row" style="justify-content:space-between"><span class="note">기록: <b id="syncName">연결 중</b></span><span class="tag" id="syncState">확인 중</span></div>
+        <div class="note">시나리오: <b id="scenName">불러오는 중</b></div>
         <div class="form">
           <label for="sStage">이 기기는<select id="sStage"><option value="1">1단계 청소년기</option><option value="2">2단계 청년기</option><option value="3">3단계 중장년기</option><option value="4">4단계 노년기</option><option value="0">자동 (배리어프리·테스트)</option></select></label>
           <label for="sQuiz">퀴즈 (줄이 길면 끄기)<select id="sQuiz"><option value="rights">권리 맞히기</option><option value="help">도움받을 곳 맞히기</option><option value="off">끄기</option></select></label>
@@ -235,6 +236,13 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
 </section>
 
 <section id="v-bank" hidden>
+  <div class="panel stack" id="sheetPanel" style="margin-bottom:24px">
+    <h2 style="margin:0">시나리오 저장소 (구글 시트)</h2>
+    <p class="note">팀원은 시트에 한 줄씩 쓰고, '검수' 칸이 O인 줄만 게임에 들어갑니다. 문제가 있는 줄은 빠지고 아래에 이유가 나옵니다. 시트를 고친 뒤 '다시 불러오기'를 누르거나 페이지를 새로 열면 반영됩니다.</p>
+    <div class="row"><a class="btn" id="sheetOpen" target="_blank" rel="noopener">시트 열기</a><button class="btn" id="sheetReload">다시 불러오기</button></div>
+    <div class="stats" id="sheetStats"></div>
+    <div id="sheetProblems"></div>
+  </div>
   <h2>AI로 시나리오를 늘릴 수 있는가</h2>
   <p class="lead">시드 12개(팀원이 쓸 자리, 지금은 예시)를 바탕으로 AI가 차별 사유나 행위 주체, 생애 경로를 바꾼 변형을 만들었습니다. 아래 숫자는 이 페이지가 직접 계산합니다. 자동 형식 검사와, 가상 인생 3,000명을 돌려 본 커버리지입니다.</p>
   <div class="stats" id="stats"></div>
@@ -906,20 +914,22 @@ function pickEvent(id, stage, codes, flags, p, pool) {
   return c[c.length - 1];
 }
 // 이전 선택 코드를 재생해서 지금까지의 인생을 복원
-function replay(id, codes, pool) {
+// evIds: 기록에 남은 단계별 장면 ID. 있으면 그 장면을 그대로 쓴다 (시나리오가 시트에서 바뀌어도 이미 지난 단계는 그대로)
+function replay(id, codes, pool, evIds, known) {
   const birth = profile(id), cur = Object.assign({}, birth), flags = new Set(), steps = []; let ended = false;
   for (let s = 1; s <= codes.length; s++) {
     if (ended) return { error: (s - 1) + "단계에서 이미 엔딩을 맞은 인생입니다. 엔딩존으로 안내해 주세요." };
     const trans = applyTransitions(id, s, cur, flags);
-    const ev = pickEvent(id, s, codes.slice(0, s - 1), flags, cur, pool);
+    const rid = evIds && evIds[s - 1], kept = rid && (pool.find(e => e.id === rid) || (known && known[rid]));
+    const ev = kept || pickEvent(id, s, codes.slice(0, s - 1), flags, cur, pool);
     const ch = ev && ev.choices.find(c => c.k === codes[s - 1]);
     if (!ch) return { error: s + "단계 선택 코드 '" + codes[s - 1] + "'가 이 이벤트에 없습니다. 영수증 스탬프를 다시 확인해 주세요." };
     steps.push({ stage: s, trans, ev, ch }); if (ch.flag) flags.add(ch.flag); if (ch.end) ended = true;
   }
   return { p: birth, birth, cur, flags, steps, ended };
 }
-function nextEvent(id, codes, pool) {
-  const L = replay(id, codes, pool); if (L.error) return L;
+function nextEvent(id, codes, pool, evIds, known) {
+  const L = replay(id, codes, pool, evIds, known); if (L.error) return L;
   if (L.ended || codes.length >= 4) return Object.assign(L, { done: true });
   const s = codes.length + 1, trans = applyTransitions(id, s, L.cur, L.flags);
   return Object.assign(L, { stage: s, trans, ev: pickEvent(id, s, codes, L.flags, L.cur, pool) });
@@ -1354,6 +1364,146 @@ const I18N_ZH = {
   },
 };
 
+// ===== 시나리오 저장소: 구글 시트 =====
+// 팀원은 구글 시트에 한 줄씩 시나리오를 쓰고, '검수' 칸이 O인 줄만 게임에 들어간다.
+// 순서: 구글 시트 → (연결이 안 되면) 이 기기에 마지막으로 받아 둔 시트 → (그것도 없으면) 게임에 내장된 시나리오.
+// 시트에서 문제가 있는 줄은 빼고, 왜 뺐는지 '시나리오 뱅크' 탭에 보여 준다.
+const SHEET_ID = "1aYMAcqS_74ouC_Fq83ap7C9PPAYYHgGdakdq5qMb8Jc";
+const SHEET_TAB = "시나리오";
+const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(SHEET_TAB)}`;
+const SHEET_EDIT = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+
+const shLS = { get(k){ try { return JSON.parse(localStorage.getItem(k) || "null"); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} } };
+const shTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+const BUILTIN = EVENTS.slice();                       // 게임에 내장된 시나리오 (시트가 안 될 때)
+const BUILTIN_SCRIPT = Object.fromEntries(BUILTIN.map(e => [e.id, e.script]));
+const BUILTIN_RK = Object.assign({}, RK);
+const KNOWN = Object.fromEntries(BUILTIN.map(e => [e.id, e]));   // 예전 기록을 되살릴 때 쓰는 전체 목록 (시트에서 빠진 장면 포함)
+
+// RFC 4180 CSV (따옴표 안의 쉼표·줄바꿈 처리)
+function parseCSV(text){
+  const rows = []; let row = [], f = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
+    else f += c;
+  }
+  if (f !== "" || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+
+const SH_FLAG = { "참음":"endure", "말함":"spoke", "신고":"report", "연대":"organized", "가담":"joined", "침묵":"silent", "막음":"stopped" };
+const SH_ROLE = { "당사자": null, "결정": "actor", "목격": "bystander" };
+const SH_RIGHT = Object.fromEntries(Object.entries(RIGHTS).map(([k, r]) => [r.ko, k]));
+const SH_ATTR = Object.fromEntries(ATTRS.map(a => [a.label.replace(/\s/g, ""), a]));
+
+// "성별=여; 장애=있음" → { gender: "여", disability: "있음" }
+function parseCond(s, errs, what){
+  const out = {}; if (!s.trim()) return out;
+  for (const part of s.split(/[;；\n]/).map(x => x.trim()).filter(Boolean)) {
+    const m = /^(.+?)\s*=\s*(.+)$/.exec(part);
+    if (!m) { errs.push(`${what} '${part}'는 '속성=값' 모양이 아니에요`); continue; }
+    const a = SH_ATTR[m[1].replace(/\s/g, "")];
+    if (!a) { errs.push(`${what}의 '${m[1]}'는 없는 속성이에요 (작성 안내 탭 참고)`); continue; }
+    const vals = m[2].split("/").map(x => x.trim()).filter(Boolean);
+    const bad = vals.filter(v => !a.opts.some(o => o[0] === v));
+    if (bad.length) { errs.push(`${what}: ${a.label}에 '${bad.join("/")}' 값은 없어요`); continue; }
+    out[a.k] = vals.length > 1 ? vals : vals[0];
+  }
+  return out;
+}
+
+// 시트 표 → 게임 장면. 문제가 있는 줄은 이유와 함께 problems에
+function sheetToEvents(rows){
+  const head = (rows[0] || []).map(h => h.trim()), col = n => head.indexOf(n);
+  const need = ["검수", "ID", "단계", "자리", "제목", "대본", "권리 분류", "A 선택지", "A 결과", "A 유형"];
+  const missing = need.filter(n => col(n) < 0);
+  if (missing.length) return { fatal: `시트 첫 줄에 '${missing.join("', '")}' 칸이 없어요. 칸 이름을 바꾸지 말아 주세요.`, events: [], problems: [], total: 0, approved: 0 };
+  const events = [], problems = [], rk = {}, seen = new Set(); let total = 0, approved = 0;
+  rows.slice(1).forEach((r, i) => {
+    const g = n => { const j = col(n); return j < 0 ? "" : String(r[j] == null ? "" : r[j]).trim(); };
+    const rowNo = i + 2, id = g("ID");
+    if (!r.some(x => String(x).trim())) return;
+    total++;
+    if (g("검수").toUpperCase() !== "O") return;
+    approved++;
+    const errs = [];
+    if (!/^[A-Za-z0-9가-힣_-]{2,20}$/.test(id)) errs.push("ID는 2~20자 글자·숫자·-로 써 주세요");
+    if (seen.has(id)) errs.push(`ID '${id}'가 위에 또 있어요`);
+    const stage = +g("단계"); if (![1, 2, 3, 4].includes(stage)) errs.push("단계는 1~4");
+    const roleTxt = g("자리") || "당사자"; if (!(roleTxt in SH_ROLE)) errs.push("자리는 당사자·결정·목격 중 하나");
+    const role = SH_ROLE[roleTxt];
+    const rMain = SH_RIGHT[g("권리 분류")]; if (!rMain) errs.push("권리 분류는 작성 안내 탭의 8개 중 하나");
+    const rMore = g("함께 걸린 권리").split(/[,，]/).map(x => x.trim()).filter(Boolean).map(x => { if (!SH_RIGHT[x]) errs.push(`함께 걸린 권리 '${x}'는 8개 분류에 없어요`); return SH_RIGHT[x]; }).filter(Boolean);
+    const ends = g("조기 엔딩").toUpperCase().split(/[,\s]+/).filter(Boolean);
+    const choices = [];
+    for (const k of ["A", "B", "C"]) {
+      const label = g(`${k} 선택지`), result = g(`${k} 결과`), ft = g(`${k} 유형`);
+      if (!label && !result && k === "C") continue;
+      if (!label || !result) { errs.push(`${k} 선택지와 결과를 모두 써 주세요`); continue; }
+      const flag = SH_FLAG[ft]; if (!flag) { errs.push(`${k} 유형은 참음·말함·신고·연대·가담·침묵·막음 중 하나`); continue; }
+      if (!role && ["joined", "silent", "stopped"].includes(flag)) errs.push(`${k} 유형 '${ft}'는 결정·목격 자리에서만 써요`);
+      if (role && !["joined", "silent", "stopped"].includes(flag)) errs.push(`${k} 유형 '${ft}'는 당사자 자리에서만 써요 (결정·목격은 가담·침묵·막음)`);
+      choices.push(Object.assign({ k, label, result, flag }, ends.includes(k) ? { end: true } : {}));
+    }
+    const cases = [1, 2].map(n => ({ t: g(`뉴스${n} 제목`), o: g(`뉴스${n} 언론사`), d: g(`뉴스${n} 날짜`), u: g(`뉴스${n} 링크`), k: g(`뉴스${n} 종류`) === "관련" ? "관련" : "사례" })).filter(c => c.t || c.u);
+    const cond = parseCond(g("대상 조건"), errs, "대상 조건"), excl = parseCond(g("제외 조건"), errs, "제외 조건");
+    const ev = { id, stage, origin: g("출처") === "AI 변형" ? "ai" : "seed", author: g("작성자") || undefined, title: g("제목"), actor: g("행위 주체") || "—", ground: g("차별 사유") || "—",
+      rights: g("권리 문구") || (rMain ? RIGHTS[rMain].ko + " (" + RIGHTS[rMain].law + ")" : ""), cond, excl, cases, script: g("대본"), choices };
+    if (role) ev.role = role;
+    if (g("원본 시드")) ev.parent = g("원본 시드");
+    if (g("가중치")) { const w = parseFloat(g("가중치")); if (w > 0) ev.w = w; else errs.push("가중치는 0보다 큰 숫자"); }
+    if (g("앞선 기록 필요")) { const f = SH_FLAG[g("앞선 기록 필요")]; if (f) ev.needFlag = f; else errs.push("앞선 기록 필요는 유형 이름 중 하나"); }
+    if (g("생애 전환 뒤")) ev.needTrans = g("생애 전환 뒤");
+    if (g("강조 기록")) ev.boost = g("강조 기록").split(/[,\s]+/).map(x => SH_FLAG[x]).filter(Boolean);
+    if (!ev.title) errs.push("제목이 비었어요");
+    if (!ev.script) errs.push("대본이 비었어요");
+    if (choices.length < 2) errs.push("선택지는 2~3개");
+    if (!errs.length) CHECKS.forEach(([name, f]) => { if (name.startsWith("시드 연결")) return; if (!f(ev)) errs.push("자동 검사: " + name); });
+    if (errs.length) { problems.push({ row: rowNo, id, title: g("제목"), errs }); return; }
+    seen.add(id); events.push(ev); rk[id] = [rMain].concat(rMore.filter(x => x !== rMain));
+  });
+  // 원본 시드가 시트에 없으면 연결만 끊음 (장면은 그대로 씀)
+  const ids = new Set(events.map(e => e.id)); events.forEach(e => { if (e.parent && !ids.has(e.parent)) delete e.parent; });
+  // 단계마다 장면이 하나도 없으면 게임이 멈추므로 시트 전체를 쓰지 않음
+  const emptyStage = [1, 2, 3, 4].filter(s => !events.some(e => e.stage === s));
+  if (emptyStage.length) return { fatal: `검수된 장면이 ${emptyStage.join(", ")}단계에 하나도 없어요`, events: [], problems, total, approved };
+  return { events, problems, rk, total, approved };
+}
+
+const Scenarios = {
+  source: "builtin", at: null, report: null,
+  label(){ return { sheet: "구글 시트", cache: "이 기기에 저장된 시트", builtin: "게임 내장" }[this.source]; },
+  apply(res){
+    EVENTS.length = 0; res.events.forEach(e => EVENTS.push(e));
+    Object.keys(RK).forEach(k => { if (!BUILTIN_RK[k]) delete RK[k]; }); Object.assign(RK, res.rk);
+    res.events.forEach(e => { KNOWN[e.id] = e; });
+  },
+  async load(){
+    let text = null, from = null;
+    try {
+      const r = await shTimeout(fetch(SHEET_URL, { cache: "no-store" }), 7000);
+      if (r.ok) { const t = await r.text(); if (/^\s*"?검수/.test(t)) { text = t; from = "sheet"; } else this.err = "시트를 읽었지만 첫 줄이 '검수'로 시작하지 않아요 (공유 설정이나 탭 이름 확인)"; }
+      else this.err = "시트 응답 " + r.status + " (공유: 링크가 있는 모든 사용자 보기)";
+    } catch(e){ this.err = "구글 시트에 연결하지 못했어요"; }
+    if (!text) { const c = shLS.get("2man:sheet"); if (c && c.text) { text = c.text; from = "cache"; this.at = c.at; } }
+    if (text) {
+      const res = sheetToEvents(parseCSV(text));
+      this.report = res;
+      if (!res.fatal) {
+        this.apply(res); this.source = from;
+        if (from === "sheet") { this.at = Date.now(); this.err = null; shLS.set("2man:sheet", { text, at: this.at }); }
+        return;
+      }
+      this.err = res.fatal;
+    }
+    this.source = "builtin";
+  },
+};
+
 const PLAN_HTML = `
 <h2>0. 80억분의 1에서 가져온 원리</h2>
 <p>'80억분의 1'(1in8b.life)은 UN·세계은행·WHO 통계로 172개국 중 한 곳에 무작위로 태어나 한 생을 사는 웹 게임입니다. 이 세션에서는 그 사이트에 직접 접속할 수 없어서, 공개된 소개·국가 통계 페이지와 기사로 작동 방식을 확인하고, 우리 데모를 가상 5,000명으로 자동 플레이해서 비교했습니다.</p>
@@ -1530,7 +1680,8 @@ const tAttrVal = (k, v) => (LT() && LT().attrs[k] && LT().attrs[k][1][v] != null
 const tTrans = t => { const x = LT() && LT().trans[t.id]; return x ? { label: x[0], text: x[1] } : { label: t.label, text: t.text }; };
 // 장면 하나를 지금 언어로. 번역이 없으면 한국어 원문.
 function tEv(ev){
-  const x = LT() && LT().events[ev.id]; if (!x) return ev;
+  // 시트에서 대본이 바뀐 장면은 예전 번역이 맞지 않으니 한국어 원문으로
+  const x = LT() && LT().events[ev.id]; if (!x || BUILTIN_SCRIPT[ev.id] !== ev.script) return ev;
   return Object.assign({}, ev, { title: x[0], rights: x[1], script: x[2], choices: ev.choices.map((c, i) => Object.assign({}, c, x[3][i] ? { label: x[3][i][0], result: x[3][i][1] } : {})) });
 }
 function setLang(l, quiet){
@@ -1666,6 +1817,8 @@ function gotoStation(id){
   renderLock(); if (unlocked()) load(); else $("#sPin").focus();
 }
 $("#loadBtn").onclick = () => load();
+// 기록에 남은 단계별 장면 ID (같은 선택 코드일 때만)
+const evIdsOf = (rec, codes) => rec && Array.isArray(rec.choices) ? [...codes].map((k, i) => { const c = rec.choices.find(c => c.stage === i + 1); return c && c.k === k ? c.ev : null; }) : null;
 let loadSeq = 0;
 async function load(force){
   const seq = ++loadSeq;   // 스캔과 버튼이 겹쳐도 마지막 요청만 화면에 그림
@@ -1680,7 +1833,8 @@ async function load(force){
   if (manual.length > codes.length) codes = manual;
   else if (!got.ok && !manual && +$("#sStage").value !== 1) { $("#eventArea").innerHTML = ""; $("#v-station details").open = true; return fail("기록 서버에 연결하지 못했습니다. 영수증 비상 기록란을 보고 '이전 선택 직접 입력'에 넣어 주세요."); }
   useRecLang(got.rec);
-  const r = nextEvent(id, codes, EVENTS);
+  await scenReady;
+  const r = nextEvent(id, codes, EVENTS, evIdsOf(got.rec, codes), KNOWN);
   if (r.error) { $("#eventArea").innerHTML = ""; return fail(r.error); }
   renderHist(r, got);
   if (r.done) { $("#eventArea").innerHTML = `<div class="panel stack"><h3>이 인생은 끝났습니다</h3><p>엔딩존으로 안내해 주세요.</p><div class="row"><button class="btn primary" id="goEnd">엔딩존으로</button></div></div>`; $("#goEnd").onclick = () => gotoEnding(id); return; }
@@ -1875,7 +2029,8 @@ async function ending(again){
   let codes = (got.rec && got.rec.codes) || "";
   if (manual.length > codes.length) codes = manual;
   if (!again) useRecLang(got.rec);
-  const r = replay(id, codes, EVENTS); if (r.error) { $("#eErr").textContent = r.error; return; }
+  await scenReady;
+  const r = replay(id, codes, EVENTS, evIdsOf(got.rec, codes), KNOWN); if (r.error) { $("#eErr").textContent = r.error; return; }
   if (!r.ended && codes.length < 4) { $("#eErr").textContent = got.ok ? `기록상 아직 ${codes.length + 1}단계가 남았습니다.` : "기록 서버에 연결하지 못했습니다. 아래 직접 입력을 써 주세요."; return; }
   // 다른 참가자 통계는 영수증을 먼저 보여 준 뒤에 채운다 (참가자가 많아지면 불러오는 데 시간이 걸림)
   const same = (s, all) => { if (!all) return ""; const xs = all.filter(p => p && Array.isArray(p.choices) && p.choices.some(c => c.stage === s.stage && c.ev === s.ev.id)); if (xs.length < 3) return ""; const n = xs.filter(p => p.choices.some(c => c.stage === s.stage && c.ev === s.ev.id && c.k === s.ch.k)).length; return T("sameChoice", { n: xs.length, p: Math.round(n / xs.length * 100) }); };
@@ -1978,6 +2133,21 @@ function liveStats(all){
 }
 
 // ---------- 뱅크 ----------
+function renderSheet(){
+  const R = Scenarios.report;
+  $("#sheetOpen").href = SHEET_EDIT;
+  $("#scenName").textContent = `${Scenarios.label()} · ${EVENTS.length}개${Scenarios.at ? " · " + new Date(Scenarios.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) + " 기준" : ""}`;
+  $("#sheetStats").innerHTML = [
+    [Scenarios.label(), Scenarios.err ? "지금 쓰는 시나리오 · " + Scenarios.err : "지금 쓰는 시나리오"],
+    [R ? R.total + "줄" : "—", "시트에 적힌 시나리오"],
+    [R ? R.approved + "줄" : "—", "검수 O"],
+    [EVENTS.length + "개", "게임에 들어간 장면"],
+    [R && R.problems ? R.problems.length + "줄" : "—", "문제가 있어 뺀 줄"],
+  ].map(([n, l]) => `<div class="stat"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`).join("");
+  const P = (R && R.problems) || [];
+  $("#sheetProblems").innerHTML = P.length ? `<div class="tablewrap"><table><tr><th>시트 줄</th><th>ID</th><th>제목</th><th>고칠 점</th></tr>${P.map(p => `<tr><td>${p.row}</td><td class="idc">${esc(p.id)}</td><td>${esc(p.title)}</td><td>${p.errs.map(esc).join("<br>")}</td></tr>`).join("")}</table></div>` : (R ? `<p class="note">검수된 줄은 모두 통과했습니다.</p>` : "");
+}
+$("#sheetReload").onclick = async () => { $("#sheetReload").disabled = true; await Scenarios.load(); bankDone = false; renderSheet(); if (!$("#v-bank").hidden) renderBank(); $("#sheetReload").disabled = false; };
 let bankDone = false;
 function renderBank(){
   if (bankDone) return; bankDone = true;
@@ -2033,6 +2203,8 @@ $("#planBody").innerHTML = PLAN_HTML;
 setLang(ls.get("2man:lang") || "ko", true);
 born(null, false); renderLock(); bfMode = $("#sStage").value === "0";
 Store.init();
+// 시나리오는 시트에서 받아 온 뒤에 쓰기 시작 (스테이션·엔딩은 이걸 기다림)
+const scenReady = Scenarios.load().then(() => { bankDone = false; renderSheet(); if (!$("#v-bank").hidden) renderBank(); });
 const m = /^r-([0-9A-Za-z]{6})$/.exec(location.hash.slice(1));
 if (m && normId(m[1])) { birthId = normId(m[1]); born(birthId, false); gotoStation(birthId); }
 else { let t = null; try { t = localStorage.getItem("2man-tab"); } catch(e){} if (t && $("#v-" + t)) show(t); }

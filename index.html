@@ -77,6 +77,20 @@ input.mono{font-family:var(--f-mono);letter-spacing:.08em;text-transform:upperca
 @media (prefers-reduced-motion:reduce){.receipt.printing{animation:none}}
 /* ===== 영수증 프린터 (80mm 감열지, 인쇄 폭 72mm) ===== */
 #printArea{display:none}
+/* 인쇄 버튼 + 자동 인쇄 스위치 묶음 */
+.printbox{display:inline-flex;align-items:center;gap:6px;padding:4px 4px 4px 4px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.printbox .btn{border:0;background:var(--surface-2);white-space:nowrap}
+.sw-text b,.sw-text small{white-space:nowrap}
+.switch{flex-direction:row!important;align-items:center;gap:10px!important;cursor:pointer;padding:4px 12px 4px 8px;color:var(--fg)!important;user-select:none}
+.switch input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.switch .track{flex:none;width:40px;height:22px;border-radius:999px;background:var(--line);position:relative;transition:background .15s}
+.switch .track::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.switch input:checked+.track{background:var(--accent)}
+.switch input:checked+.track::after{transform:translateX(18px)}
+.switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
+.sw-text{display:flex;flex-direction:column;line-height:1.25}
+.sw-text b{font-size:.9rem;font-weight:600}
+.sw-text small{font-size:.75rem;color:var(--muted)}
 @media print{
   @page{margin:0}
   html,body{background:#fff!important}
@@ -191,8 +205,9 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
       <h2>태어나기</h2>
       <p class="lead">버튼을 누르면 무작위 출생 속성이 정해지고 영수증이 출력됩니다. 영수증 ID 하나에 모든 속성이 들어 있어서, 어느 기기에서 열어도 같은 사람이 됩니다.</p>
       <div class="row"><span class="note">언어 · Language</span><div class="langbar" role="group" aria-label="언어 선택"></div></div>
-      <div class="row"><button class="btn primary big" id="bornBtn">태어나기</button><button class="btn" id="printBirth">영수증 인쇄</button></div>
-      <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="autoPrint"> 태어나기를 누르면 바로 인쇄 (영수증 프린터 연결된 노트북에서만)</label>
+      <div class="row" style="align-items:center"><button class="btn primary big" id="bornBtn">태어나기</button>
+        <div class="printbox"><button class="btn" id="printBirth">영수증 인쇄</button>
+          <label class="switch"><input type="checkbox" class="autoPrint" role="switch"><span class="track" aria-hidden="true"></span><span class="sw-text"><b>자동 인쇄</b><small>태어나면 바로 출력</small></span></label></div></div>
       <div class="row">
         <button class="btn" id="toStation">이 영수증으로 1단계 시작 (QR 스캔 대신)</button>
         <button class="btn" id="toBF">한 자리에서 전체 체험 (배리어프리)</button>
@@ -241,8 +256,9 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
       <div class="panel stack">
         <label for="eId">영수증 ID<input id="eId" class="mono" autocomplete="off"></label>
         <div class="row"><span class="note">참가자 언어 (QR을 찍으면 자동)</span><div class="langbar" role="group" aria-label="언어 선택"></div></div>
-        <div class="row"><button class="btn primary" id="scanE">카메라로 QR 찍기</button><button class="btn" id="endBtn">ID로 정리하기</button><button class="btn" id="printEnd">영수증 인쇄</button></div>
-        <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="autoPrint"> 영수증이 뜨면 바로 인쇄 (영수증 프린터 연결된 노트북에서만)</label>
+        <div class="row"><button class="btn primary" id="scanE">카메라로 QR 찍기</button><button class="btn" id="endBtn">ID로 정리하기</button></div>
+        <div class="printbox"><button class="btn" id="printEnd">영수증 인쇄</button>
+          <label class="switch"><input type="checkbox" class="autoPrint" role="switch"><span class="track" aria-hidden="true"></span><span class="sw-text"><b>자동 인쇄</b><small>영수증 뜨면 바로 출력</small></span></label></div>
         <details><summary class="note">기록 서버가 안 될 때만: 선택 직접 입력</summary>
           <label for="eCodes" style="margin-top:8px">선택 전체 (예: BACA)<input id="eCodes" class="mono" autocomplete="off"></label></details>
         <div id="eErr" class="err" role="alert"></div>

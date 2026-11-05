@@ -75,6 +75,22 @@ input.mono{font-family:var(--f-mono);letter-spacing:.08em;text-transform:upperca
 @keyframes print{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
 .receipt.printing{animation:print 1.1s steps(18) both}
 @media (prefers-reduced-motion:reduce){.receipt.printing{animation:none}}
+/* ===== 영수증 프린터 (80mm 감열지, 인쇄 폭 72mm) ===== */
+#printArea{display:none}
+@media print{
+  @page{margin:0}
+  html,body{background:#fff!important}
+  body>*:not(#printArea){display:none!important}
+  #printArea{display:block!important;width:72mm;margin:0;padding:0}
+  #printArea .receipt{max-width:none;width:72mm;margin:0;padding:3mm 2mm 8mm;background:#fff!important;color:#000!important;box-shadow:none!important;border:0!important;animation:none!important;clip-path:none!important;font-size:10pt;line-height:1.45}
+  #printArea .receipt *{color:#000!important}
+  #printArea .receipt hr{border-top-color:#000}
+  #printArea .receipt .small{font-size:8pt}
+  #printArea .receipt .big{font-size:15pt}
+  #printArea .receipt .lifeline{font-size:11pt}
+  #printArea .receipt .qr svg{width:34mm;height:34mm}
+  #printArea .receipt .stamps div{border-color:#000}
+}
 
 /* 스테이션 */
 .quiz{border:1px dashed var(--line);border-radius:10px;padding:12px 14px;background:var(--surface)}
@@ -175,7 +191,8 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
       <h2>태어나기</h2>
       <p class="lead">버튼을 누르면 무작위 출생 속성이 정해지고 영수증이 출력됩니다. 영수증 ID 하나에 모든 속성이 들어 있어서, 어느 기기에서 열어도 같은 사람이 됩니다.</p>
       <div class="row"><span class="note">언어 · Language</span><div class="langbar" role="group" aria-label="언어 선택"></div></div>
-      <div class="row"><button class="btn primary big" id="bornBtn">태어나기</button></div>
+      <div class="row"><button class="btn primary big" id="bornBtn">태어나기</button><button class="btn" id="printBirth">영수증 인쇄</button></div>
+      <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="autoPrint"> 태어나기를 누르면 바로 인쇄 (영수증 프린터 연결된 노트북에서만)</label>
       <div class="row">
         <button class="btn" id="toStation">이 영수증으로 1단계 시작 (QR 스캔 대신)</button>
         <button class="btn" id="toBF">한 자리에서 전체 체험 (배리어프리)</button>
@@ -224,7 +241,8 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
       <div class="panel stack">
         <label for="eId">영수증 ID<input id="eId" class="mono" autocomplete="off"></label>
         <div class="row"><span class="note">참가자 언어 (QR을 찍으면 자동)</span><div class="langbar" role="group" aria-label="언어 선택"></div></div>
-        <div class="row"><button class="btn primary" id="scanE">카메라로 QR 찍기</button><button class="btn" id="endBtn">ID로 정리하기</button></div>
+        <div class="row"><button class="btn primary" id="scanE">카메라로 QR 찍기</button><button class="btn" id="endBtn">ID로 정리하기</button><button class="btn" id="printEnd">영수증 인쇄</button></div>
+        <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="autoPrint"> 영수증이 뜨면 바로 인쇄 (영수증 프린터 연결된 노트북에서만)</label>
         <details><summary class="note">기록 서버가 안 될 때만: 선택 직접 입력</summary>
           <label for="eCodes" style="margin-top:8px">선택 전체 (예: BACA)<input id="eCodes" class="mono" autocomplete="off"></label></details>
         <div id="eErr" class="err" role="alert"></div>
@@ -1837,7 +1855,22 @@ function born(id, save){
   $("#receipt").innerHTML = receiptHtml(birthId);
   if (save) Store.save(birthId, { codes: "", choices: [], bornAt: Date.now(), lang: LANG });
 }
-$("#bornBtn").onclick = () => born(null, true);
+// ---------- 영수증 인쇄 ----------
+// 화면의 영수증만 복사해서 80mm 감열지 폭으로 인쇄한다. 엔딩은 한마디가 채워질 때까지 기다린 뒤 인쇄.
+const autoPrint = () => !!ls.get("2man:autoprint");
+document.querySelectorAll(".autoPrint").forEach(c => { c.checked = autoPrint(); c.onchange = () => { ls.set("2man:autoprint", c.checked); document.querySelectorAll(".autoPrint").forEach(x => x.checked = c.checked); }; });
+async function printReceipt(sel){
+  const src = $(sel + " .receipt"); if (!src) return;
+  for (let i = 0; i < 60; i++) { const l = $(sel + " #lifeLine"); if (!l || l.textContent !== T("writing")) break; await new Promise(r => setTimeout(r, 100)); }
+  let pa = $("#printArea"); if (!pa) { pa = document.createElement("div"); pa.id = "printArea"; document.body.appendChild(pa); }
+  const copy = $(sel + " .receipt").cloneNode(true); copy.classList.remove("printing"); copy.removeAttribute("id");
+  copy.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
+  pa.innerHTML = ""; pa.appendChild(copy);
+  window.print();
+}
+$("#printBirth").onclick = () => printReceipt("#receipt");
+$("#printEnd").onclick = () => printReceipt("#endArea");
+$("#bornBtn").onclick = () => { born(null, true); if (autoPrint()) printReceipt("#receipt"); };
 $("#toStation").onclick = () => { bfMode = false; gotoStation(birthId); };
 $("#toBF").onclick = () => { bfMode = true; $("#sStage").value = "0"; gotoStation(birthId); };
 
@@ -2093,6 +2126,7 @@ async function ending(again){
     <div class="c small" style="margin-top:8px">${T("insta")}</div><hr>
     <div class="c small">✎ ${T("backNote")}</div></div>`;
   fillLifeLine(id, r, got.rec, codes);
+  if (autoPrint() && !again) printReceipt("#endArea");
   const all = await Store.allCached(); if (seq !== endSeq) return;
   document.querySelectorAll("#endArea .same").forEach(el => { el.textContent = same(r.steps[+el.dataset.i], all); });
   liveStats(all);

@@ -1370,12 +1370,14 @@ const I18N_ZH = {
 // 시트에서 문제가 있는 줄은 빼고, 왜 뺐는지 '시나리오 뱅크' 탭에 보여 준다.
 const SHEET_ID = "1aYMAcqS_74ouC_Fq83ap7C9PPAYYHgGdakdq5qMb8Jc";
 const SHEET_TAB = "시나리오";
-const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(SHEET_TAB)}`;
+const sheetUrl = tab => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(tab)}`;
+const SHEET_URL = sheetUrl(SHEET_TAB), TR_URL = sheetUrl("번역");
 const SHEET_EDIT = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
 
 const shLS = { get(k){ try { return JSON.parse(localStorage.getItem(k) || "null"); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} } };
 const shTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
-const BUILTIN = EVENTS.slice();                       // 게임에 내장된 시나리오 (시트가 안 될 때)
+const BUILTIN = EVENTS.slice();
+const LANGS_BUILTIN = { en: I18N_EN, zh: I18N_ZH, easy: I18N_EASY };                       // 게임에 내장된 시나리오 (시트가 안 될 때)
 const BUILTIN_SCRIPT = Object.fromEntries(BUILTIN.map(e => [e.id, e.script]));
 const BUILTIN_RK = Object.assign({}, RK);
 const KNOWN = Object.fromEntries(BUILTIN.map(e => [e.id, e]));   // 예전 기록을 되살릴 때 쓰는 전체 목록 (시트에서 빠진 장면 포함)
@@ -1474,6 +1476,28 @@ function sheetToEvents(rows){
   return { events, problems, rk, total, approved };
 }
 
+// ===== 번역 탭: 장면 하나에 언어마다 한 줄 =====
+// '번역 기준 대본(한국어)'이 지금 시나리오 탭의 대본과 같을 때만 쓴다. 다르면 한국어 원문으로 보여 주고 '다시 번역 필요'로 표시.
+const SH_LANG = { "English": "en", "영어": "en", "中文": "zh", "중국어": "zh", "쉬운 말": "easy", "쉬운말": "easy" };
+const SHEET_TR = { en: {}, zh: {}, easy: {} };
+function sheetToTranslations(rows, events){
+  const head = (rows[0] || []).map(h => h.trim()), col = n => head.indexOf(n);
+  const out = { en: {}, zh: {}, easy: {} }, stale = [], bad = [];
+  if (col("ID") < 0 || col("언어") < 0) return { out, stale, bad, fatal: "번역 탭 첫 줄에 ID·언어 칸이 없어요" };
+  const byId = Object.fromEntries(events.map(e => [e.id, e]));
+  rows.slice(1).forEach((r, i) => {
+    const g = n => { const j = col(n); return j < 0 ? "" : String(r[j] == null ? "" : r[j]).trim(); };
+    const id = g("ID"), L = SH_LANG[g("언어")]; if (!id) return;
+    if (!L) { bad.push({ row: i + 2, id, msg: `언어 '${g("언어")}'는 English·中文·쉬운 말 중 하나` }); return; }
+    if (g("번역 검수").toUpperCase() === "X") return;
+    const ev = byId[id]; if (!ev) return;
+    if (g("번역 기준 대본(한국어)") !== ev.script) { stale.push({ row: i + 2, id, lang: L }); return; }
+    const ch = ["A", "B", "C"].map(k => [g(k + " 선택지"), g(k + " 결과")]);
+    if (!g("제목") || !g("대본") || ev.choices.some((c, j) => !ch[j][0] || !ch[j][1])) { bad.push({ row: i + 2, id, msg: "제목·대본·선택지·결과 중 빈 칸이 있어요" }); return; }
+    out[L][id] = [g("제목"), g("권리 문구") || "", g("대본"), ch.slice(0, ev.choices.length), g("번역 검수").toUpperCase() === "O"];
+  });
+  return { out, stale, bad };
+}
 const Scenarios = {
   source: "builtin", at: null, report: null,
   label(){ return { sheet: "구글 시트", cache: "이 기기에 저장된 시트", builtin: "게임 내장" }[this.source]; },
@@ -1482,6 +1506,18 @@ const Scenarios = {
     Object.keys(RK).forEach(k => { if (!BUILTIN_RK[k]) delete RK[k]; }); Object.assign(RK, res.rk);
     res.events.forEach(e => { KNOWN[e.id] = e; });
   },
+  async loadTr(online){
+    let text = null;
+    if (online) { try { const r = await shTimeout(fetch(TR_URL, { cache: "no-store" }), 7000); if (r.ok) { const t = await r.text(); if (/^\s*"?ID/.test(t)) { text = t; shLS.set("2man:sheetTr", { text }); } } } catch(e){} }
+    if (!text) { const c = shLS.get("2man:sheetTr"); if (c) text = c.text; }
+    ["en", "zh", "easy"].forEach(L => { SHEET_TR[L] = {}; });
+    if (!text) { this.tr = null; return; }
+    const res = sheetToTranslations(parseCSV(text), EVENTS);
+    ["en", "zh", "easy"].forEach(L => { SHEET_TR[L] = res.out[L]; });
+    this.tr = res;
+  },
+  // 언어별로 번역이 없는 장면 (내장 번역이 원문과 맞으면 있는 것으로 침)
+  missing(L){ return EVENTS.filter(e => !SHEET_TR[L][e.id] && !(BUILTIN_SCRIPT[e.id] === e.script && LANGS_BUILTIN[L].events[e.id])); },
   async load(){
     let text = null, from = null;
     try {
@@ -1496,6 +1532,7 @@ const Scenarios = {
       if (!res.fatal) {
         this.apply(res); this.source = from;
         if (from === "sheet") { this.at = Date.now(); this.err = null; shLS.set("2man:sheet", { text, at: this.at }); }
+        await this.loadTr(from === "sheet");
         return;
       }
       this.err = res.fatal;
@@ -1681,7 +1718,8 @@ const tTrans = t => { const x = LT() && LT().trans[t.id]; return x ? { label: x[
 // 장면 하나를 지금 언어로. 번역이 없으면 한국어 원문.
 function tEv(ev){
   // 시트에서 대본이 바뀐 장면은 예전 번역이 맞지 않으니 한국어 원문으로
-  const x = LT() && LT().events[ev.id]; if (!x || BUILTIN_SCRIPT[ev.id] !== ev.script) return ev;
+  // 시트 '번역' 탭이 먼저, 없으면 게임에 내장된 번역 (원문이 그대로일 때만)
+  const x = LANG !== "ko" && ((SHEET_TR[LANG] || {})[ev.id] || (LT() && BUILTIN_SCRIPT[ev.id] === ev.script ? LT().events[ev.id] : null)); if (!x) return ev;
   return Object.assign({}, ev, { title: x[0], rights: x[1], script: x[2], choices: ev.choices.map((c, i) => Object.assign({}, c, x[3][i] ? { label: x[3][i][0], result: x[3][i][1] } : {})) });
 }
 function setLang(l, quiet){
@@ -2144,8 +2182,13 @@ function renderSheet(){
     [EVENTS.length + "개", "게임에 들어간 장면"],
     [R && R.problems ? R.problems.length + "줄" : "—", "문제가 있어 뺀 줄"],
   ].map(([n, l]) => `<div class="stat"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`).join("");
+  const T = Scenarios.tr, langs = [["en", "English"], ["zh", "中文"], ["easy", "쉬운 말"]];
+  const trRows = langs.map(([L, name]) => { const miss = Scenarios.missing(L), stale = T ? T.stale.filter(x => x.lang === L) : [], ok = Object.values(SHEET_TR[L]).filter(x => x[4]).length;
+    return `<tr><td>${name}</td><td>${EVENTS.length - miss.length} / ${EVENTS.length}</td><td>${ok}</td><td>${miss.length ? miss.map(e => `<span class="idc">${esc(e.id)}</span>`).join(" ") : "—"}</td><td>${stale.length ? stale.map(x => `<span class="idc">${esc(x.id)}</span> (${x.row}줄)`).join(" ") : "—"}</td></tr>`; }).join("");
+  const trBad = T && T.bad.length ? `<p class="note">번역 탭 문제: ${T.bad.map(b => `${b.row}줄 ${esc(b.id)} · ${esc(b.msg)}`).join(" / ")}</p>` : "";
+  const trHtml = `<h3 style="margin:16px 0 6px">번역 (시트 '번역' 탭)</h3>${T ? "" : `<p class="note">번역 탭을 읽지 못해 게임에 내장된 번역을 씁니다.</p>`}<div class="tablewrap"><table><tr><th>언어</th><th>번역된 장면</th><th>번역 검수 O</th><th>번역이 없는 장면 (한국어로 나옴)</th><th>원문이 바뀌어 다시 번역 필요</th></tr>${trRows}</table></div>${trBad}`;
   const P = (R && R.problems) || [];
-  $("#sheetProblems").innerHTML = P.length ? `<div class="tablewrap"><table><tr><th>시트 줄</th><th>ID</th><th>제목</th><th>고칠 점</th></tr>${P.map(p => `<tr><td>${p.row}</td><td class="idc">${esc(p.id)}</td><td>${esc(p.title)}</td><td>${p.errs.map(esc).join("<br>")}</td></tr>`).join("")}</table></div>` : (R ? `<p class="note">검수된 줄은 모두 통과했습니다.</p>` : "");
+  $("#sheetProblems").innerHTML = trHtml + (P.length ? `<div class="tablewrap"><table><tr><th>시트 줄</th><th>ID</th><th>제목</th><th>고칠 점</th></tr>${P.map(p => `<tr><td>${p.row}</td><td class="idc">${esc(p.id)}</td><td>${esc(p.title)}</td><td>${p.errs.map(esc).join("<br>")}</td></tr>`).join("")}</table></div>` : (R ? `<p class="note">검수된 줄은 모두 통과했습니다.</p>` : ""));
 }
 $("#sheetReload").onclick = async () => { $("#sheetReload").disabled = true; await Scenarios.load(); bankDone = false; renderSheet(); if (!$("#v-bank").hidden) renderBank(); $("#sheetReload").disabled = false; };
 let bankDone = false;

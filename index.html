@@ -229,10 +229,7 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
         <div class="form">
           <label for="sStage">이 기기는<select id="sStage"><option value="1">1단계 청소년기</option><option value="2">2단계 청년기</option><option value="3">3단계 중장년기</option><option value="4">4단계 노년기</option><option value="0">자동 (배리어프리·테스트)</option></select></label>
           <label for="sQuiz">퀴즈 (줄이 길면 끄기)<select id="sQuiz"><option value="rights">권리 맞히기</option><option value="help">도움받을 곳 맞히기</option><option value="off">끄기</option></select></label>
-          <label for="sPin">스탭 PIN (근무 시작 때 한 번)<input id="sPin" inputmode="numeric" placeholder="4자리" autocomplete="off"></label>
         </div>
-        <div class="row"><button class="btn" id="unlockBtn">기기 잠금 해제</button><span class="note" id="lockState"></span></div>
-        <p class="note">지금 PIN <span class="pin" id="curPin"></span> · 30분마다 바뀌고, 해제는 6시간 유지 (데모라 화면에 표시)</p>
       </div>
       <div class="panel stack">
         <label for="sId">영수증 ID (QR을 찍으면 자동으로 채워짐)<input id="sId" class="mono" placeholder="예: UN9-VPD" autocomplete="off"></label>
@@ -1706,14 +1703,11 @@ events.json으로 동결 → 사이트에 포함</div>
 </ul>`;
 
 (function(){
-// 영수증 QR에 들어갈 주소: 깃헙 페이지·localhost에서 열면 지금 주소를 그대로 쓴다 (따로 고칠 필요 없음)
-const BASE = location.protocol === "https:" && !/claude\.(ai|site)|claudeusercontent/.test(location.host) || location.hostname === "localhost"
-  ? location.origin + location.pathname : "https://YOUR-ID.github.io/2man/";
+// 영수증 QR에는 사이트 주소 없이 영수증 ID만 넣는다 (예: 2MAN:MZJ-JAX).
+// 참가자가 자기 폰 카메라로 찍어도 글자만 보이고 게임이 열리지 않으니, 스탭 PIN 없이도 혼자 진행할 수 없다.
+const QR_PREFIX = "2MAN:";
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
-const pinFor = slot => String(1000 + hashStr("2man-booth-secret|" + slot) % 9000);
-const slotNow = () => Math.floor(Date.now() / (30 * 60 * 1000));
-const pinOk = v => v === pinFor(slotNow()) || v === pinFor(slotNow() - 1);
 let bfMode = false, current = null;
 
 // ---------- 언어 (한국어 / 쉬운 말 / English) ----------
@@ -1847,7 +1841,7 @@ function renderSync(){
 
 // ---------- 출생 ----------
 function receiptHtml(id){
-  const p = profile(id), url = BASE + "#r-" + id;
+  const p = profile(id), url = QR_PREFIX + fmtId(id);
   const qr = qrcode(0, "M"); qr.addData(url); qr.make();
   const pctTxt = q => { const lo = q < 0.5, n = Math.max(1, Math.round((lo ? q : 1 - q) * 100));
     return LANG === "en" ? `${lo ? "Bottom" : "Top"} ${n}%` : LANG === "zh" ? `${lo ? "后" : "前"} ${n}%` : LANG === "easy" ? `100명 중 ${lo ? "아래에서" : "위에서"} ${n}번째쯤` : `${lo ? "하위" : "상위"} ${n}%`; };
@@ -1891,17 +1885,11 @@ $("#toStation").onclick = () => { bfMode = false; gotoStation(birthId); };
 $("#toBF").onclick = () => { bfMode = true; $("#sStage").value = "0"; gotoStation(birthId); };
 
 // ---------- 스테이션 ----------
-const UNLOCK_MS = 6 * 3600 * 1000;
-const unlocked = () => { const t = ls.get("2man:unlock"); return t && Date.now() - t < UNLOCK_MS; };
-function renderLock(){ $("#lockState").textContent = unlocked() ? "잠금 해제됨" : "잠김: PIN을 넣고 해제해 주세요"; $("#lockState").className = unlocked() ? "note saved" : "note"; }
-$("#curPin").textContent = pinFor(slotNow());
-$("#unlockBtn").onclick = () => { if (pinOk($("#sPin").value.trim())) { ls.set("2man:unlock", Date.now()); $("#sPin").value = ""; $("#sErr").textContent = ""; renderLock(); } else fail("PIN이 맞지 않습니다. 현재 PIN을 확인해 주세요."); };
 { const st = ls.get("2man:stage"); if (st !== null) $("#sStage").value = String(st); }
 $("#sStage").onchange = () => { ls.set("2man:stage", +$("#sStage").value); bfMode = $("#sStage").value === "0"; $("#bfTag").hidden = !bfMode; };
 function gotoStation(id){
   $("#sId").value = fmtId(id); $("#sCodes").value = ""; $("#bfTag").hidden = !bfMode; show("station");
-  if (bfMode && !unlocked()) ls.set("2man:unlock", Date.now());   // 데모: 출생 탭에서 넘어온 연속 모드는 바로 진행
-  renderLock(); if (unlocked()) load(); else $("#sPin").focus();
+  load();
 }
 $("#loadBtn").onclick = () => load();
 // 기록에 남은 단계별 장면 ID (같은 선택 코드일 때만)
@@ -1912,7 +1900,6 @@ async function load(force){
   $("#sErr").textContent = "";
   const id = normId($("#sId").value);
   if (!id) return fail("영수증 ID가 올바르지 않습니다. 6자리(마지막 자리는 검증용)를 다시 확인해 주세요.");
-  if (!unlocked()) return fail("기기가 잠겨 있습니다. 스탭 PIN으로 먼저 해제해 주세요.");
   const manual = $("#sCodes").value.toUpperCase().replace(/[^ABC]/g, "");
   $("#eventArea").innerHTML = `<div class="panel note">기록 불러오는 중…</div>`;
   const got = await Store.get(id); if (seq !== loadSeq) return;
@@ -2043,8 +2030,8 @@ function casesHtml(ev){
 
 // ---------- 카메라 QR 스캔 ----------
 // 휴대폰 카메라로 영수증 QR을 읽는다. 실시간 카메라가 안 되면(권한 거부, 일부 앱 화면) '사진으로 찍기'로 대신한다.
-// QR 안에는 사이트 주소 + #r-영수증ID 가 들어 있다. ID만 꺼내 쓴다.
-function parseQR(t){ const m = /r-([0-9A-Za-z]{6})/.exec(t || "") || /^\s*([0-9A-Za-z]{3}-?[0-9A-Za-z]{3})\s*$/.exec(t || ""); return m ? normId(m[1]) : null; }
+// 2MAN:MZJ-JAX (새 영수증), 예전 주소형 #r-MZJJAX, ID만 있는 글자 모두 읽는다
+function parseQR(t){ t = String(t || "").trim(); const m = /^2MAN:\s*([0-9A-Za-z]{3}-?[0-9A-Za-z]{3})$/i.exec(t) || /r-([0-9A-Za-z]{6})/.exec(t) || /^([0-9A-Za-z]{3}-?[0-9A-Za-z]{3})$/.exec(t); return m ? normId(m[1]) : null; }
 const Scanner = {
   stream: null, timer: 0, cb: null, run: 0, det: null,
   async open(cb){
@@ -2294,13 +2281,12 @@ $("#fStage").onchange = renderList;
 // ---------- 시작 ----------
 $("#planBody").innerHTML = PLAN_HTML;
 setLang(ls.get("2man:lang") || "ko", true);
-born(null, false); renderLock(); bfMode = $("#sStage").value === "0";
+born(null, false); bfMode = $("#sStage").value === "0";
 Store.init();
 // 시나리오는 시트에서 받아 온 뒤에 쓰기 시작 (스테이션·엔딩은 이걸 기다림)
 const scenReady = Scenarios.load().then(() => { bankDone = false; renderSheet(); if (!$("#v-bank").hidden) renderBank(); });
-const m = /^r-([0-9A-Za-z]{6})$/.exec(location.hash.slice(1));
-if (m && normId(m[1])) { birthId = normId(m[1]); born(birthId, false); gotoStation(birthId); }
-else { let t = null; try { t = localStorage.getItem("2man-tab"); } catch(e){} if (t && $("#v-" + t)) show(t); }
+// 예전 주소형 QR(#r-ID)로 들어와도 스테이션을 열지 않는다 (참가자 혼자 진행 방지)
+{ let t = null; try { t = localStorage.getItem("2man-tab"); } catch(e){} if (t && $("#v-" + t)) show(t); }
 })();
 
 </script>

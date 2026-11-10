@@ -227,6 +227,7 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
       <h2>단계 스테이션 <span class="tag" id="bfTag" hidden>배리어프리 연속 모드</span></h2>
       <div class="panel stack">
         <div class="row" style="justify-content:space-between"><span class="note">기록: <b id="syncName">연결 중</b></span><span class="tag" id="syncState">확인 중</span></div>
+        <div class="row" style="align-items:center"><button class="btn" id="syncCheck">기록 서버 연결 확인</button><span class="note" id="syncCheckOut"></span></div>
         <div class="note">시나리오: <b id="scenName">불러오는 중</b></div>
         <div class="form">
           <label for="sStage">이 기기는<select id="sStage"><option value="1">1단계 청소년기</option><option value="2">2단계 청년기</option><option value="3">3단계 중장년·노년기</option><option value="0">자동 (배리어프리)</option></select></label>
@@ -1357,7 +1358,7 @@ const Store = {
   },
   async remotePut(id, rec){
     if (this.kind === "artifact") return this.db.doc("players/" + id).set(rec);
-    if (this.kind === "firebase") { const r = await fetch(`${FIREBASE_URL}/players/${id}.json`, { method: "PUT", body: JSON.stringify(rec) }); if (!r.ok) throw new Error(r.status); }
+    if (this.kind === "firebase") { const r = await fetch(`${FIREBASE_URL}/players/${id}.json`, { method: "PUT", body: JSON.stringify(rec) }); if (!r.ok) { let m = ""; try { m = (await r.json()).error || ""; } catch(e){} this.lastErr = r.status + (m ? " " + m : ""); throw new Error(this.lastErr); } this.lastErr = ""; }
   },
   // 서버 기록과 이 기기 기록 중 더 많이 진행된 쪽을 믿는다
   async get(id){
@@ -1368,7 +1369,7 @@ const Store = {
   async save(id, rec){
     ls.set("2man:rec:" + id, rec); if (this.kind === "local") return true;
     try { await timeout(this.remotePut(id, rec), 6000); ls.set("2man:pending", this.pending().filter(x => x !== id)); renderSync(); return true; }
-    catch(e){ const p = this.pending(); if (!p.includes(id)) p.push(id); ls.set("2man:pending", p); renderSync(); this.retryLater(); return false; }
+    catch(e){ if (!this.lastErr) this.lastErr = String(e && e.message || e); const p = this.pending(); if (!p.includes(id)) p.push(id); ls.set("2man:pending", p); renderSync(); this.retryLater(); return false; }
   },
   retryLater(){ if (!this.timer) this.timer = setTimeout(() => { this.timer = null; this.flush(); }, 8000); },
   async flush(){
@@ -1393,9 +1394,20 @@ const Store = {
     return out;
   },
 };
+// 저장 실패 이유를 스탭이 알아볼 말로
+function errText(e){ e = String(e); if (/Permission denied|401/.test(e)) return "Firebase 규칙이 막음"; if (/404/.test(e)) return "Firebase 주소 확인"; if (/Failed to fetch|NetworkError|Load failed/.test(e)) return "인터넷·브라우저 차단"; if (/timeout/.test(e)) return "응답 없음"; return e; }
+// 연결 확인: 시험 기록을 하나 쓰고 다시 읽는다
+async function checkServer(){
+  const out = $("#syncCheckOut"); out.textContent = "확인 중…";
+  if (Store.kind === "local") { out.textContent = "기록 서버가 설정되어 있지 않아요 (이 기기에만 저장)"; return; }
+  const rec = { codes: "CHECK", at: Date.now() };
+  try { await timeout(Store.remotePut("CHECK0", rec), 8000); } catch(e){ out.textContent = "쓰기 실패: " + errText(Store.lastErr || e.message) + " (" + (Store.lastErr || e.message) + ")"; return; }
+  try { const r = await timeout(Store.remoteGet("CHECK0"), 8000); out.textContent = r && r.at === rec.at ? "✓ 쓰기·읽기 모두 정상" : "쓰기는 됐지만 다시 읽지 못했어요"; }
+  catch(e){ out.textContent = "읽기 실패: " + errText(e.message); }
+}
 function renderSync(){
   $("#syncName").textContent = Store.name; const n = Store.pending().length;
-  $("#syncState").textContent = n ? `저장 대기 ${n}건 · 자동 재시도` : "정상";
+  $("#syncState").textContent = n ? `저장 대기 ${n}건 · 자동 재시도${Store.lastErr ? " · " + errText(Store.lastErr) : ""}` : "정상";
   $("#syncState").className = "tag" + (n ? " right" : Store.kind === "local" ? "" : " seed");
 }
 
@@ -1452,6 +1464,7 @@ function gotoStation(id){
   load();
 }
 $("#loadBtn").onclick = () => load();
+$("#syncCheck").onclick = () => checkServer();
 // 기록에 남은 단계별 장면 ID (같은 선택 코드일 때만)
 const evIdsOf = (rec, codes) => rec && Array.isArray(rec.choices) ? [...codes].map((k, i) => { const c = rec.choices.find(c => c.stage === i + 1); return c && c.k === k ? c.ev : null; }) : null;
 let loadSeq = 0;

@@ -1,89 +1,112 @@
-/* KU Lives — AHAPOS CPP-3000 Web Serial receipt printing.
- * 기존 serial-printer.js 전체를 이 코드로 교체하세요.
+/*
+ * KU Lives — AHAPOS CPP-3000
+ * USB Web Serial Receipt Printer
  *
- * 기능:
- * - 웹사이트 기존 영수증 디자인 / 한글 / QR 코드 유지
- * - USB 가상 COM 포트로 ESC/POS 이미지 출력
- * - 연속 인쇄 요청 순차 처리
- * - 작은 이미지 블록과 보수적인 전송 간격
- * - 출력 후 대기 시간
+ * 기능
+ * 1. 웹사이트 영수증 디자인 유지
+ * 2. 한글 및 QR 코드 이미지 인쇄
+ * 3. 출력 대기열과 순차 처리
+ * 4. 블록 단위 데이터 전송
+ * 5. 인쇄 후 자동 커터 명령
  *
- * 참고: Web Serial write()는 실제 종이 인쇄 완료를 보장하지 않습니다.
+ * Chrome / Edge + Web Serial 사용
  */
 
 (() => {
-  'use strict';
+  "use strict";
+
+  // ==========================================
+  // 1. 프린터 설정
+  // ==========================================
 
   const CONFIG = Object.freeze({
     USB_VENDOR_ID: 0x1cbe,
     USB_PRODUCT_ID: 0x0002,
+
     BAUD_RATE: 9600,
-  
+
     DOT_WIDTH: 576,
     BLOCK_HEIGHT: 16,
-  
+
+    // 데이터 전송 사이의 간격
     AFTER_BLOCK_MS: 90,
+
+    // 마지막 인쇄와 절단 명령 사이의 대기
+    BEFORE_CUT_MS: 500,
+
+    // 다음 영수증 전까지 대기
     AFTER_JOB_MS: 2500,
-  
-    MAX_WAITING_JOBS: 3
+
+    MAX_WAITING_JOBS: 3,
+
+    // 자동 커터 사용
+    AUTO_CUT: true,
+
+    // 0 = 완전 절단, 1 = 부분 절단
+    CUT_MODE: 0
   });
 
-  const pause = ms =>
+  const sleep = ms =>
     new Promise(resolve => setTimeout(resolve, ms));
 
   let port = null;
   let connecting = false;
-  let running = false;
+  let printing = false;
   let queue = [];
   let rendererPromise = null;
 
   const indicators = [];
 
+  // ==========================================
+  // 2. 상태 메시지
+  // ==========================================
+
   function notify(message, error = false) {
     indicators.forEach(el => {
       el.textContent = message;
-      el.style.color = error ? '#bd2840' : '';
+      el.style.color = error ? "#b4233c" : "";
     });
   }
 
-  function buttonsConnected(connected) {
-    document.querySelectorAll('.ku-serial-connect')
+  function updateButtons(connected) {
+    document.querySelectorAll(".ku-serial-connect")
       .forEach(button => {
         button.textContent = connected
-          ? 'USB 연결됨'
-          : 'USB 프린터 연결';
+          ? "USB 연결됨"
+          : "USB 프린터 연결";
       });
   }
 
-  // --------------------------------------------------
-  // 1. USB 프린터 연결
-  // --------------------------------------------------
+  // ==========================================
+  // 3. USB 프린터 연결
+  // ==========================================
 
   async function connect() {
-    if (!('serial' in navigator)) {
+    if (!("serial" in navigator)) {
       notify(
-        'Windows Chrome/Edge에서 USB 직접 출력이 가능합니다.',
+        "Chrome 또는 Edge에서 USB 인쇄를 사용하세요.",
         true
       );
 
       alert(
-        'Web Serial을 지원하는 Chrome 또는 Edge에서 열어 주세요.'
+        "이 브라우저는 Web Serial을 지원하지 않습니다."
       );
 
       return;
     }
 
-    if (connecting || port) {
+    if (port || connecting) {
       notify(
         port
-          ? '프린터가 이미 연결되어 있습니다.'
-          : '프린터 연결 중…'
+          ? "프린터가 이미 연결되어 있습니다."
+          : "프린터 연결 중..."
       );
       return;
     }
 
     connecting = true;
-    let selected;
+
+    let selected = null;
 
     try {
       selected = await navigator.serial.requestPort({
@@ -97,8 +120,8 @@
         baudRate: CONFIG.BAUD_RATE,
         dataBits: 8,
         stopBits: 1,
-        parity: 'none',
-        flowControl: 'none'
+        parity: "none",
+        flowControl: "none"
       });
 
       try {
@@ -107,13 +130,14 @@
           requestToSend: true
         });
       } catch (_) {
-        // 일부 가상 COM 드라이버는 신호 설정을 지원하지 않음
+        // 일부 USB 가상 COM 드라이버는 지원하지 않음
       }
 
       port = selected;
 
-      buttonsConnected(true);
-      notify('CPP-3000 연결됨 · 인쇄 준비 완료');
+      updateButtons(true);
+
+      notify("CPP-3000 USB 연결 완료");
 
     } catch (error) {
       if (selected) {
@@ -123,7 +147,7 @@
       }
 
       notify(
-        'USB 연결 실패: ' + error.message,
+        "USB 연결 실패: " + error.message,
         true
       );
 
@@ -132,35 +156,35 @@
     }
   }
 
-  // --------------------------------------------------
-  // 2. HTML 영수증을 이미지로 변환
-  // --------------------------------------------------
+  // ==========================================
+  // 4. HTML 이미지 변환 라이브러리
+  // ==========================================
 
-  function getRenderer() {
-    if (typeof window.html2canvas === 'function') {
+  function loadRenderer() {
+    if (typeof window.html2canvas === "function") {
       return Promise.resolve(window.html2canvas);
     }
 
     if (!rendererPromise) {
       rendererPromise = new Promise((resolve, reject) => {
-        const script = document.createElement('script');
+        const script = document.createElement("script");
 
         script.src =
-          'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+          "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
 
         script.onload = () => {
-          if (typeof window.html2canvas === 'function') {
+          if (typeof window.html2canvas === "function") {
             resolve(window.html2canvas);
           } else {
             reject(
-              new Error('이미지 변환 라이브러리 실행 실패')
+              new Error("이미지 변환 라이브러리 실행 실패")
             );
           }
         };
 
         script.onerror = () => {
           reject(
-            new Error('이미지 라이브러리를 불러오지 못했습니다.')
+            new Error("이미지 라이브러리 다운로드 실패")
           );
         };
 
@@ -175,45 +199,49 @@
     return rendererPromise;
   }
 
-  async function captureReceipt(receipt) {
-    const render = await getRenderer();
+  // ==========================================
+  // 5. 웹사이트 영수증 캡처
+  // ==========================================
 
-    const holder = document.createElement('div');
+  async function captureReceipt(receipt) {
+    const render = await loadRenderer();
+
+    const holder = document.createElement("div");
 
     holder.style.cssText = [
-      'position:fixed',
-      'top:0',
-      'left:-10000px',
-      'width:330px',
-      'background:#fff',
-      'pointer-events:none',
-      'z-index:-1'
-    ].join(';');
+      "position:fixed",
+      "top:0",
+      "left:-10000px",
+      "width:330px",
+      "background:#fff",
+      "pointer-events:none",
+      "z-index:-1"
+    ].join(";");
 
     const node = receipt.cloneNode(true);
 
-    node.classList.remove('printing');
-    node.removeAttribute('id');
+    node.classList.remove("printing");
+    node.removeAttribute("id");
 
-    node.querySelectorAll('[id]').forEach(child => {
-      child.removeAttribute('id');
+    node.querySelectorAll("[id]").forEach(el => {
+      el.removeAttribute("id");
     });
 
     node.style.cssText += [
-      ';width:330px',
-      'max-width:none',
-      'margin:0',
-      'background:#fff',
-      'color:#000',
-      'box-shadow:none',
-      'animation:none',
-      'mask:none',
-      '-webkit-mask:none'
-    ].join(';');
+      ";width:330px",
+      "max-width:none",
+      "margin:0",
+      "background:#fff",
+      "color:#000",
+      "box-shadow:none",
+      "animation:none",
+      "mask:none",
+      "-webkit-mask:none"
+    ].join(";");
 
-    node.querySelectorAll('.small,.stamps i')
-      .forEach(child => {
-        child.style.color = '#000';
+    node.querySelectorAll(".small,.stamps i")
+      .forEach(el => {
+        el.style.color = "#000";
       });
 
     holder.append(node);
@@ -223,7 +251,7 @@
       await document.fonts.ready;
 
       return await render(node, {
-        backgroundColor: '#ffffff',
+        backgroundColor: "#ffffff",
         scale: CONFIG.DOT_WIDTH / 330,
         width: 330,
         useCORS: true,
@@ -236,9 +264,9 @@
     }
   }
 
-  // --------------------------------------------------
-  // 3. 이미지를 흑백으로 변환
-  // --------------------------------------------------
+  // ==========================================
+  // 6. 이미지를 흑백으로 변환
+  // ==========================================
 
   function toMonochrome(canvas) {
     const { width, height } = canvas;
@@ -249,20 +277,28 @@
       height > 20000
     ) {
       throw new Error(
-        '영수증 이미지 크기가 예상 범위를 벗어났습니다.'
+        "영수증 이미지 크기가 올바르지 않습니다."
       );
     }
 
-    const rgba = canvas
-      .getContext('2d', { willReadFrequently: true })
-      .getImageData(0, 0, width, height).data;
+    const context = canvas.getContext("2d", {
+      willReadFrequently: true
+    });
+
+    if (!context) {
+      throw new Error("이미지 처리에 실패했습니다.");
+    }
+
+    const rgba = context.getImageData(
+      0, 0, width, height
+    ).data;
 
     const pixels = new Uint8Array(width * height);
 
     const errors = new Float32Array(width + 2);
     const next = new Float32Array(width + 2);
 
-    // Floyd–Steinberg 디더링
+    // Floyd-Steinberg dithering
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const offset = (y * width + x) * 4;
@@ -277,11 +313,11 @@
 
         const value = gray + errors[x + 1];
 
-        const isBlack = value < 145;
+        const black = value < 145;
 
-        pixels[y * width + x] = isBlack ? 1 : 0;
+        pixels[y * width + x] = black ? 1 : 0;
 
-        const diff = value - (isBlack ? 0 : 255);
+        const diff = value - (black ? 0 : 255);
 
         errors[x + 2] += diff * 7 / 16;
 
@@ -297,152 +333,182 @@
     return { width, height, pixels };
   }
 
-  // --------------------------------------------------
-  // 4. ESC/POS 이미지 블록 생성
-  // --------------------------------------------------
+  // ==========================================
+  // 7. ESC/POS 이미지 블록 생성
+  // ==========================================
 
   function rasterBlock(image, fromY, rows) {
-    const widthBytes = image.width >> 3;
+    const bytesPerRow = Math.ceil(image.width / 8);
 
-    const result = new Uint8Array(
-      8 + widthBytes * rows
+    const data = new Uint8Array(
+      8 + bytesPerRow * rows
     );
 
-    // ESC/POS GS v 0
-    result.set([
+    // GS v 0 : Raster Bit Image
+    data.set([
       0x1d, 0x76, 0x30, 0x00,
-      widthBytes & 255,
-      widthBytes >> 8,
+      bytesPerRow & 255,
+      (bytesPerRow >> 8) & 255,
       rows & 255,
-      rows >> 8
+      (rows >> 8) & 255
     ]);
 
     let at = 8;
 
     for (let y = fromY; y < fromY + rows; y++) {
-      for (let bx = 0; bx < widthBytes; bx++) {
-        let word = 0;
+      for (let bx = 0; bx < bytesPerRow; bx++) {
+        let bits = 0;
 
         for (let bit = 0; bit < 8; bit++) {
+          const x = bx * 8 + bit;
+
           if (
+            x < image.width &&
             image.pixels[
-              y * image.width + bx * 8 + bit
+              y * image.width + x
             ]
           ) {
-            word |= 0x80 >> bit;
+            bits |= 0x80 >> bit;
           }
         }
 
-        result[at++] = word;
+        data[at++] = bits;
       }
     }
 
-    return result;
+    return data;
   }
 
-  // --------------------------------------------------
-  // 5. COM 포트로 이미지 전송
-  // --------------------------------------------------
+  // ==========================================
+  // 8. 프린터로 인쇄 데이터 전송
+  // ==========================================
 
   async function sendImage(image) {
-    if (!port?.writable) {
-      throw new Error('USB 프린터가 연결되지 않았습니다.');
+    if (!port || !port.writable) {
+      throw new Error("USB 프린터가 연결되지 않았습니다.");
     }
 
     const writer = port.writable.getWriter();
 
-    let succeeded = false;
-
     try {
-      // 프린터 초기화
+      // ESC @ : 프린터 초기화
       await writer.write(
         new Uint8Array([0x1b, 0x40])
       );
 
-      await pause(200);
+      await sleep(150);
 
-      const count = Math.ceil(
+      const blocks = Math.ceil(
         image.height / CONFIG.BLOCK_HEIGHT
       );
 
-      for (let i = 0; i < count; i++) {
-        const start = i * CONFIG.BLOCK_HEIGHT;
+      for (let i = 0; i < blocks; i++) {
+        const fromY = i * CONFIG.BLOCK_HEIGHT;
 
         const rows = Math.min(
           CONFIG.BLOCK_HEIGHT,
-          image.height - start
+          image.height - fromY
         );
 
-        // 완전한 이미지 블록 단위로 전송
-        await writer.write(
-          rasterBlock(image, start, rows)
+        const data = rasterBlock(
+          image,
+          fromY,
+          rows
         );
 
-        // 프린터 수신 버퍼 과부하 가능성 감소
-        await pause(CONFIG.AFTER_BLOCK_MS);
+        // 이미지 블록 전송
+        await writer.write(data);
+
+        // 프린터 수신 버퍼에 여유를 줌
+        await sleep(CONFIG.AFTER_BLOCK_MS);
 
         if (
-          i % 4 === 0 ||
-          i === count - 1
+          i % 8 === 0 ||
+          i === blocks - 1
         ) {
           const progress = Math.round(
-            (i + 1) * 100 / count
+            (i + 1) * 100 / blocks
           );
 
           notify(
-            'CPP-3000 데이터 전송 ' +
+            "영수증 전송 중 " +
             progress +
-            '% · 대기 ' +
+            "% · 대기 " +
             queue.length +
-            '건'
+            "건"
           );
         }
       }
 
-      // 마지막 용지 배출
+      // ======================================
+      // 9. 인쇄 종료 및 자동 절단
+      // ======================================
+
+      notify("영수증 마지막 부분 처리 중...");
+
+      // 이미지 블록 전송이 모두 끝난 후
+      await sleep(CONFIG.BEFORE_CUT_MS);
+
+      // 하단 여백 확보
       await writer.write(
-        new Uint8Array([0x0a, 0x0a, 0x0a])
+        new Uint8Array([
+          0x0a,
+          0x0a,
+          0x0a
+        ])
       );
 
-      succeeded = true;
+      await sleep(300);
+
+      if (CONFIG.AUTO_CUT) {
+        notify("자동 절단 명령 전송 중...");
+
+        // ESC/POS GS V
+        // 0 = 완전 절단 요청
+        // 1 = 부분 절단 요청
+        await writer.write(
+          new Uint8Array([
+            0x1d,
+            0x56,
+            CONFIG.CUT_MODE
+          ])
+        );
+      }
 
     } finally {
       writer.releaseLock();
-
-      if (succeeded) {
-        notify(
-          '데이터 전송 완료 · 프린터 처리 대기 중…'
-        );
-
-        await pause(CONFIG.AFTER_JOB_MS);
-      }
     }
+
+    // 다음 영수증 전까지 대기
+    notify("전송 완료 · 다음 출력 준비 중...");
+
+    await sleep(CONFIG.AFTER_JOB_MS);
   }
 
-  // --------------------------------------------------
-  // 6. 연속 출력 대기열
-  // --------------------------------------------------
+  // ==========================================
+  // 10. 인쇄 대기열
+  // ==========================================
 
-  async function drainQueue() {
-    if (running) return;
+  async function processQueue() {
+    if (printing) return;
 
-    running = true;
+    printing = true;
 
     try {
-      while (queue.length) {
+      while (queue.length > 0) {
         const job = queue.shift();
 
         try {
           if (!port) {
             throw new Error(
-              '프린터 연결이 해제되었습니다.'
+              "USB 연결이 해제되었습니다."
             );
           }
 
           notify(
-            '영수증 이미지 준비 중… · 대기 ' +
+            "영수증 이미지 생성 중... · 대기 " +
             queue.length +
-            '건'
+            "건"
           );
 
           const canvas = await captureReceipt(
@@ -454,33 +520,31 @@
           await sendImage(image);
 
           notify(
-            '인쇄 데이터 전송 완료 · 대기 ' +
+            "출력 데이터 전송 및 절단 명령 완료 · 대기 " +
             queue.length +
-            '건'
+            "건"
           );
 
           job.resolve(true);
 
         } catch (error) {
-          notify(
-            '프린터 오류: ' +
-            error.message +
-            ' · 자동 재전송하지 않습니다.',
-            true
+          console.error(
+            "[CPP-3000 PRINT ERROR]",
+            error
           );
 
-          console.error(
-            '[CPP-3000]',
-            error
+          notify(
+            "인쇄 오류: " +
+            error.message +
+            " · 대기열 중단",
+            true
           );
 
           job.resolve(false);
 
-          // 오류 발생 시 후속 인쇄 중단
-          for (
-            const pending of queue.splice(0)
-          ) {
-            pending.resolve(false);
+          // 오류 발생 시 중복 출력 방지
+          for (const waiting of queue.splice(0)) {
+            waiting.resolve(false);
           }
 
           break;
@@ -488,23 +552,19 @@
       }
 
     } finally {
-      running = false;
+      printing = false;
     }
   }
 
-  // --------------------------------------------------
-  // 7. 사이트의 기존 영수증 인쇄 함수와 연결
-  // --------------------------------------------------
+  // ==========================================
+  // 11. 영수증 출력 요청
+  // ==========================================
 
   async function print(receipt, browserPrint) {
+    // USB 프린터 미연결 시 기존 인쇄
     if (!port) {
-      if (typeof browserPrint === 'function') {
+      if (typeof browserPrint === "function") {
         browserPrint();
-      } else {
-        notify(
-          'USB 프린터를 연결해 주세요.',
-          true
-        );
       }
 
       return false;
@@ -512,23 +572,21 @@
 
     if (!receipt) {
       notify(
-        '영수증 요소를 찾을 수 없습니다.',
+        "영수증 데이터를 찾을 수 없습니다.",
         true
       );
       return false;
     }
 
-    if (
-      queue.length >= CONFIG.MAX_WAITING_JOBS
-    ) {
+    if (queue.length >= CONFIG.MAX_WAITING_JOBS) {
       notify(
-        '인쇄 대기열이 가득 찼습니다.',
+        "인쇄 대기열이 가득 찼습니다.",
         true
       );
       return false;
     }
 
-    // 요청 시점의 영수증을 고정
+    // 출력 요청 당시의 영수증 고정
     const frozen = receipt.cloneNode(true);
 
     return new Promise(resolve => {
@@ -538,72 +596,72 @@
       });
 
       notify(
-        '인쇄 요청 등록 · 대기 ' +
+        "인쇄 대기열 등록 · " +
         queue.length +
-        '건'
+        "건"
       );
 
-      void drainQueue();
+      void processQueue();
     });
   }
 
-  // --------------------------------------------------
-  // 8. 웹사이트에 USB 연결 버튼 추가
-  // --------------------------------------------------
+  // ==========================================
+  // 12. 웹사이트 연결 버튼 생성
+  // ==========================================
 
   function mount() {
-    document.querySelectorAll('.printbox')
+    document.querySelectorAll(".printbox")
       .forEach(box => {
         if (
-          box.querySelector('.ku-serial-connect')
+          box.querySelector(".ku-serial-connect")
         ) {
           return;
         }
 
-        const button = document.createElement('button');
+        const button = document.createElement("button");
 
-        button.type = 'button';
-        button.className = 'btn ku-serial-connect';
-        button.textContent = 'USB 프린터 연결';
+        button.type = "button";
+        button.className = "btn ku-serial-connect";
+        button.textContent = "USB 프린터 연결";
 
         button.addEventListener(
-          'click',
+          "click",
           connect
         );
 
         box.append(button);
 
-        const note = document.createElement('span');
+        const note = document.createElement("span");
 
-        note.className = 'note';
-        note.setAttribute('role', 'status');
+        note.className = "note";
+        note.setAttribute("role", "status");
 
         note.textContent =
-          'USB 미연결 시 기존 브라우저 인쇄 사용';
+          "USB 미연결 시 브라우저 인쇄 사용";
 
         box.insertAdjacentElement(
-          'afterend',
+          "afterend",
           note
         );
 
         indicators.push(note);
       });
 
-    if (!('serial' in navigator)) {
+    if (!("serial" in navigator)) {
       notify(
-        'Web Serial 미지원: 브라우저 인쇄만 가능',
+        "Web Serial 미지원 · 브라우저 인쇄 사용",
         true
       );
     }
   }
 
-  // --------------------------------------------------
-  // 9. USB 연결 해제 감지
-  // --------------------------------------------------
+  // ==========================================
+  // 13. 프린터 연결 해제 감지
+  // ==========================================
 
-  if ('serial' in navigator) {
+  if ("serial" in navigator) {
     navigator.serial.addEventListener(
-      'disconnect',
+      "disconnect",
       event => {
         if (
           port &&
@@ -611,10 +669,10 @@
         ) {
           port = null;
 
-          buttonsConnected(false);
+          updateButtons(false);
 
           notify(
-            'USB 연결이 끊어졌습니다. 다시 연결하세요.',
+            "USB 프린터 연결이 끊어졌습니다.",
             true
           );
         }
@@ -622,20 +680,22 @@
     );
   }
 
-  // --------------------------------------------------
-  // 10. 기존 index.html에 API 제공
-  // --------------------------------------------------
+  // ==========================================
+  // 14. 기존 사이트 API
+  // ==========================================
 
   window.CPP300Printer = {
     connect,
     print,
-    isConnected: () => !!port,
+
+    isConnected: () => Boolean(port),
+
     pendingCount: () => queue.length
   };
 
-  if (document.readyState === 'loading') {
+  if (document.readyState === "loading") {
     document.addEventListener(
-      'DOMContentLoaded',
+      "DOMContentLoaded",
       mount
     );
   } else {

@@ -1,0 +1,11 @@
+--- a/index.html
++++ b/index.html
+@@ printReceipt(sel) @@
+   pa.innerHTML = ""; pa.appendChild(copy);
+-  window.print();
++  if (window.CPP300Printer) await window.CPP300Printer.print(copy, () => window.print());
++  else window.print();
+@@ end of file @@
+ </script>
++<script src="./serial-printer.js"></script>
+ </html>

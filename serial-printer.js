@@ -18,13 +18,13 @@
     USB_VENDOR_ID: 0x1cbe,
     USB_PRODUCT_ID: 0x0002,
     BAUD_RATE: 9600,
-
+  
     DOT_WIDTH: 576,
-    BLOCK_HEIGHT: 8,
-
-    AFTER_BLOCK_MS: 1100,
-    AFTER_JOB_MS: 5000,
-
+    BLOCK_HEIGHT: 16,
+  
+    AFTER_BLOCK_MS: 90,
+    AFTER_JOB_MS: 2500,
+  
     MAX_WAITING_JOBS: 3
   });
 

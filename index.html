@@ -1448,7 +1448,8 @@ async function printReceipt(sel){
   const copy = $(sel + " .receipt").cloneNode(true); copy.classList.remove("printing"); copy.removeAttribute("id");
   copy.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
   pa.innerHTML = ""; pa.appendChild(copy);
-  window.print();
+  if (window.CPP300Printer) await window.CPP300Printer.print(copy, () => window.print());
+  else window.print();
 }
 $("#printBirth").onclick = () => printReceipt("#receipt");
 $("#printEnd").onclick = () => printReceipt("#endArea");
@@ -1885,5 +1886,5 @@ const scenReady = Scenarios.load().then(() => { bankDone = false; renderSheet();
 { let t = null; try { t = localStorage.getItem("2man-tab"); } catch(e){} if (t && $("#v-" + t)) show(t); }
 })();
 
-</script>
+<script src="./serial-printer.js"></script>
 </html>

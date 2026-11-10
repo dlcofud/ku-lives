@@ -213,7 +213,7 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
         <div class="printbox"><button class="btn" id="printBirth">영수증 인쇄</button>
           <label class="switch"><input type="checkbox" class="autoPrint" role="switch"><span class="track" aria-hidden="true"></span><span class="sw-text"><b>자동 인쇄</b><small>태어나면 바로 출력</small></span></label></div></div>
       <div class="row">
-        <button class="btn" id="toStation">이 영수증으로 1단계 시작 (테스트용)</button>
+        <button class="btn" id="toStation">이 영수증으로 1단계 시작</button>
         <button class="btn" id="toBF">한 자리에서 전체 체험 (배리어프리)</button>
       </div>
     </div>
@@ -229,7 +229,7 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
         <div class="row" style="justify-content:space-between"><span class="note">기록: <b id="syncName">연결 중</b></span><span class="tag" id="syncState">확인 중</span></div>
         <div class="note">시나리오: <b id="scenName">불러오는 중</b></div>
         <div class="form">
-          <label for="sStage">이 기기는<select id="sStage"><option value="1">1단계 청소년기</option><option value="2">2단계 청년기</option><option value="3">3단계 중장년·노년기</option><option value="0">자동 (배리어프리·테스트)</option></select></label>
+          <label for="sStage">이 기기는<select id="sStage"><option value="1">1단계 청소년기</option><option value="2">2단계 청년기</option><option value="3">3단계 중장년·노년기</option><option value="0">자동 (배리어프리)</option></select></label>
           <label for="sQuiz">퀴즈 (줄이 길면 끄기)<select id="sQuiz"><option value="rights">권리 맞히기</option><option value="help">도움받을 곳 맞히기</option><option value="off">끄기</option></select></label>
         </div>
       </div>
@@ -258,7 +258,7 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
         <div class="printbox"><button class="btn" id="printEnd">영수증 인쇄</button>
           <label class="switch"><input type="checkbox" class="autoPrint" role="switch"><span class="track" aria-hidden="true"></span><span class="sw-text"><b>자동 인쇄</b><small>영수증 뜨면 바로 출력</small></span></label></div>
         <details><summary class="note">기록 서버가 안 될 때만: 선택 직접 입력</summary>
-          <label for="eCodes" style="margin-top:8px">선택 전체 (예: BACA)<input id="eCodes" class="mono" autocomplete="off"></label></details>
+          <label for="eCodes" style="margin-top:8px">선택 전체 (예: BAC)<input id="eCodes" class="mono" autocomplete="off"></label></details>
         <div id="eErr" class="err" role="alert"></div>
       </div>
       <div class="stats" id="liveStats"></div>
@@ -1130,9 +1130,9 @@ const Scenarios = {
 
 const PLAN_HTML = `
 <h2>0. 80억분의 1에서 가져온 원리</h2>
-<p>'80억분의 1'(1in8b.life)은 UN·세계은행·WHO 통계로 172개국 중 한 곳에 무작위로 태어나 한 생을 사는 웹 게임입니다. 이 세션에서는 그 사이트에 직접 접속할 수 없어서, 공개된 소개·국가 통계 페이지와 기사로 작동 방식을 확인하고, 우리 데모를 가상 5,000명으로 자동 플레이해서 비교했습니다.</p>
+<p>'80억분의 1'(1in8b.life)은 UN·세계은행·WHO 통계로 172개국 중 한 곳에 무작위로 태어나 한 생을 사는 웹 게임입니다. 공개된 소개·국가 통계 페이지와 기사로 작동 방식을 확인하고, 우리 게임을 가상 5,000명으로 자동 플레이해서 비교했습니다.</p>
 <div class="tablewrap"><table>
-<tr><th>80억분의 1의 원리</th><th>우리 데모에서 문제였던 점</th><th>바꾼 것</th></tr>
+<tr><th>80억분의 1의 원리</th><th>처음 기획에서 문제였던 점</th><th>바꾼 것</th></tr>
 <tr><td>태어나는 곳은 실제 출생아 수에 비례해 뽑는다</td><td>장애·이주배경·성소수자를 15%씩 임의로 줌</td><td>실제 통계 가중치로 교체 (장애 1%, 이주배경 4%, 한부모 9% 등). 체험용 가중치는 MODE로 남김</td></tr>
 <tr><td>소득은 국가 소득 분포(지니계수)에서 연속값으로 정한다</td><td>가정 경제가 상20/중50/하30 세 칸뿐</td><td>소득 백분위를 뽑고 로그정규분포로 금액 계산. 빈곤선 아래 15.3%가 '하', 상위 20%가 '상'</td></tr>
 <tr><td>'558명 중 1명'처럼 확률을 보여 준다</td><td>없음</td><td>영수증에 '이 조건으로 태어날 확률 약 n명 중 1명'</td></tr>
@@ -1203,7 +1203,7 @@ AI 변형 생성 — 시드마다 2~3개, 빈칸 속성 우선 (권리는 유지
 events.json으로 동결 → 사이트에 포함</div>
 <p><b>엔딩 영수증의 '이 삶을 한마디로'.</b> 기본은 미리 써 둔 문장 은행입니다. 피해 장면에서 고른 행동의 흐름(참음, 말함, 신고, 함께함, 오래 참다 말함 등)과 남의 권리가 걸린 장면의 선택으로, 삶 전체를 한 문장으로 요약하는 문장을 고릅니다. API도 요금도 들지 않고, 모든 문장을 행사 전에 검수할 수 있습니다(시나리오 뱅크 탭). 더 개인화된 문장을 원하면 엔딩존 노트북에서 line_server.py를 켭니다. 기본은 노트북 안에서 도는 무료 모델(Ollama)이고, Gemini 무료 등급이나 Claude API도 고를 수 있습니다. 이미 만든 삶이면 저장된 문장을 다시 띄우고, AI가 실패하거나 규칙에 어긋나면 문장 은행으로 돌아갑니다. AI에는 정체성 정보를 보내지 않습니다.</p>
 <p><b>AI는 현장에서 실시간으로 쓰지 않습니다.</b> 미리 만들어 검수한 뒤 고정합니다. 이유는 네 가지입니다. 응답에 몇 초씩 걸리고, 검수 안 된 문장이 참가자 앞에 나갈 수 있고, 민주광장 통신이 불안하며, GitHub Pages 같은 정적 사이트에서 AI를 부르면 API 키가 그대로 공개됩니다.</p>
-<p><b>증명은 세 가지 숫자로 합니다.</b> (가) 자동 형식 검사 통과율, (나) 사람 검수에서 기준 ①~④ 통과율, (다) 커버리지 향상. 이 데모의 '시나리오 뱅크' 탭이 (가)와 (다)를 직접 계산합니다. 예시 시드 12개만으로는 성소수자·한부모·보호시설·비수도권 출신이 자기 속성과 관련된 이벤트를 만날 확률이 0%였고, AI 변형을 더하자 대략 35~70%로 올라갑니다. (나)는 팀원 시드가 모인 뒤 실제 변형으로 측정해야 합니다. 목표는 변형의 70% 이상이 수정 없이 또는 경미한 수정으로 채택되는 것입니다.</p>
+<p><b>증명은 세 가지 숫자로 합니다.</b> (가) 자동 형식 검사 통과율, (나) 사람 검수에서 기준 ①~④ 통과율, (다) 커버리지 향상. 이 게임의 '시나리오 뱅크' 탭이 (가)와 (다)를 직접 계산합니다. 예시 시드 12개만으로는 성소수자·한부모·보호시설·비수도권 출신이 자기 속성과 관련된 이벤트를 만날 확률이 0%였고, AI 변형을 더하자 대략 35~70%로 올라갑니다. (나)는 팀원 시드가 모인 뒤 실제 변형으로 측정해야 합니다. 목표는 변형의 70% 이상이 수정 없이 또는 경미한 수정으로 채택되는 것입니다.</p>
 <p>생성 스크립트(<code>generate_variants.py</code>)와 시드 템플릿(<code>seed_template.csv</code>)을 함께 드렸습니다. 팀원이 시트에 쓰면 CSV로 내려받아 스크립트를 돌리고, 결과는 검수용 CSV와 JSON으로 나옵니다.</p>
 
 <h2>4. 시스템 구조: 자동 기록</h2>
@@ -1220,7 +1220,7 @@ events.json으로 동결 → 사이트에 포함</div>
 <tr><td>설정</td><td>계정 만들고 규칙 붙여넣기, 약 30분</td><td>스크립트 배포, CORS 우회 필요</td><td>없음</td></tr>
 <tr><td>통신이 끊기면</td><td colspan="2">폰에 보관했다가 자동 재전송 + 화면에 비상 코드 표시</td><td>영향 없음</td></tr>
 </table></div>
-<div class="rec"><b>추천: Firebase 실시간 DB.</b> 브라우저에서 주소 하나로 읽고 쓰는 방식(REST)이라 별도 라이브러리가 필요 없고, 부스 규모(수백 명)는 무료 요금제로 충분합니다. 코드는 <code>FIREBASE_URL</code> 한 줄만 채우면 됩니다. 이 데모 페이지에서는 Claude 아티팩트의 공유 저장소를 같은 자리에 꽂아 두어서, 페이지를 연 여러 폰끼리 실제로 기록이 이어집니다.</div>
+<div class="rec"><b>추천: Firebase 실시간 DB.</b> 브라우저에서 주소 하나로 읽고 쓰는 방식(REST)이라 별도 라이브러리가 필요 없고, 부스 규모(수백 명)는 무료 요금제로 충분합니다. 코드는 <code>FIREBASE_URL</code> 한 줄만 채우면 됩니다.</div>
 <p><b>끊김 대비.</b> 서버 저장이 실패하면 그 폰에 기록을 보관하고 8초마다 다시 보냅니다. 상단 배지에 '저장 대기 n건'이 뜨고, 결과 화면에 영수증 비상 기록란에 적을 글자(A/B/C)가 나옵니다. 다음 부스도 서버에 못 붙으면 그 글자를 '직접 입력'에 넣으면 됩니다. 같은 ID와 같은 선택이면 어느 폰에서나 같은 결과가 나오게 만들어 두었기 때문에 가능한 일입니다. 스탭 폰은 데이터(LTE)로 쓰고, 핫스팟 하나를 예비로 둡니다.</p>
 <p><b>순서 꼬임 방지.</b> 각 폰을 '1단계 기기', '2단계 기기'처럼 정해 두면, 앞 단계를 건너뛰고 온 참가자나 이미 한 단계를 다시 온 참가자를 화면이 알려 줍니다.</p>
 <p><b>혼자 하는 것 막기.</b> 스탭 폰은 근무 시작 때 30분마다 바뀌는 PIN으로 한 번 잠금을 풀고, 6시간 유지됩니다. 참가자가 집에서 QR을 찍어도 잠긴 화면만 보입니다.</p>
@@ -1338,11 +1338,11 @@ document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.
 
 // ---------- 기록 저장소 ----------
 // 순서: 아티팩트 공유 DB(이 데모) → Firebase 실시간 DB(깃헙 페이지 배포용) → 이 기기 안(테스트용)
-const FIREBASE_URL = "";   // 예: "https://2man-booth-default-rtdb.asia-southeast1.firebasedatabase.app"
+const FIREBASE_URL = "https://man-booth-default-rtdb.asia-southeast1.firebasedatabase.app";   // 예: "https://2man-booth-default-rtdb.asia-southeast1.firebasedatabase.app"
 const ls = { get(k){ try { return JSON.parse(localStorage.getItem(k) || "null"); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} } };
 const timeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
 const Store = {
-  kind: "local", name: "이 기기 안에만 (테스트용)", db: null,
+  kind: "local", name: "이 기기", db: null,
   async init(){
     try { if (window.claude && window.claude.use) { const db = await window.claude.use("db"); if (db) { this.db = db; this.kind = "artifact"; this.name = "공유 기록 서버"; } } } catch(e){}
     if (this.kind === "local" && FIREBASE_URL) { this.kind = "firebase"; this.name = "Firebase 실시간 DB"; }
@@ -1395,7 +1395,7 @@ const Store = {
 };
 function renderSync(){
   $("#syncName").textContent = Store.name; const n = Store.pending().length;
-  $("#syncState").textContent = n ? `저장 대기 ${n}건 · 자동 재시도` : (Store.kind === "local" ? "다른 기기와 공유 안 됨" : "정상");
+  $("#syncState").textContent = n ? `저장 대기 ${n}건 · 자동 재시도` : "정상";
   $("#syncState").className = "tag" + (n ? " right" : Store.kind === "local" ? "" : " seed");
 }
 
@@ -1557,7 +1557,7 @@ async function choose(k){
   current.reshow = () => { const sv = $("#saveLine") ? $("#saveLine").innerHTML : ""; drawResult(); $("#saveLine").innerHTML = sv; };
   drawResult();
   const ok = await Store.save(id, next);
-  $("#saveLine").innerHTML = ok ? `<span class="saved">✓ 기록됨</span>${Store.kind === "local" ? " (이 기기 안에만)" : ""}`
+  $("#saveLine").innerHTML = ok ? `<span class="saved">✓ 기록됨</span>`
     : `<span class="err">서버 저장 실패 · 이 기기에 보관하고 자동으로 다시 보냅니다.</span><br>만약을 위해 영수증 비상 기록란 ${stage}단계 칸에 <span class="stampbox">${k}</span>를 적어 주세요.`;
 }
 

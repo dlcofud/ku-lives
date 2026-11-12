@@ -189,6 +189,7 @@ ul.clean{margin:0;padding-left:1.1em} ul.clean li{margin-bottom:4px}
 .crit b{display:block;margin-bottom:2px}
 .rec{background:var(--ok-soft);color:var(--fg);border-radius:10px;padding:12px 14px;margin:10px 0}
 .flow{font-family:var(--f-mono);font-size:.84rem;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;white-space:pre;line-height:1.7}
+.stageintro{margin:0;padding:8px 12px;border-left:3px solid var(--accent,#a3243b);background:rgba(127,127,127,.08);border-radius:6px}
 </style>
 
 <header><div class="wrap">
@@ -1291,6 +1292,13 @@ const UI_MORE = {
   zh:   { twTitle: "请稍等，先提醒你", twBody: "下一个场景包含与“{what}”有关的内容。如果不想看，可以换成别的场景。选哪个都可以。", twGo: "继续这个场景", twSkip: "换一个场景", qRights: "这个场景中被侵犯的是哪项权利？", qHelp: "遇到这种情况，可以向哪里求助？", qRight: "答对了", qWrong: "绿色的是正确答案", helpAt: "求助渠道", sticker: "可领取的贴纸", snack: "可领取的零食", backNote: "请在背面写一句：你一生中最希望得到保障的权利是什么？写好后钉在墙上", birthOf: "出生编号", sameChoice: " · 相同处境的 {n} 人中，{p}% 做了同样的选择", count: "{n} 次", times: "{n} 次", writing: "正在用一句话写下这段人生…", aiBy: "", newsLang: "（韩文报道）", stageN: "第{s}阶段 · {name}" },
   en:   { twTitle: "Before we continue", twBody: "The next scene includes content about {what}. If you would rather not, we can switch to a different scene. Either choice is fine.", twGo: "Continue with this scene", twSkip: "Switch to another scene", qRights: "Which right was violated in this scene?", qHelp: "Where could you ask for help if this happened?", qRight: "Correct", qWrong: "The green one is the answer", helpAt: "Where to get help", sticker: "Your sticker", snack: "Your snack", backNote: "On the back, write one line: which right did you most wish had been protected? Then pin it to the wall", birthOf: "Birth no.", sameChoice: " · {p}% of {n} people in the same situation chose the same", count: "{n}", times: "{n}", writing: "Writing this life in one line…", aiBy: "", newsLang: " (in Korean)", stageN: "Stage {s} · {name}" },
 };
+// 단계가 바뀔 때 먼저 읽는 한 줄 (갑자기 다음 시기로 넘어가는 느낌을 줄이려고)
+const STAGE_INTRO = {
+  ko:   ["", "당신은 이제 중·고등학생입니다.", "시간이 흘러 당신은 20대 후반~30대가 되었습니다. 대학을 다니거나 일을 시작한 시기입니다.", "다시 시간이 흘러 당신은 40대에서 70대에 이르는 삶을 지나고 있습니다."],
+  easy: ["", "이제 당신은 중학생, 고등학생이에요.", "시간이 지나 당신은 어른이 되었어요. 대학에 다니거나 일을 시작했어요.", "시간이 더 지나 당신은 나이가 많이 들었어요."],
+  en:   ["", "You are now a middle or high school student.", "Time passes. You are now in your late twenties to thirties, studying at university or starting work.", "More time passes. You are now living through your forties to your seventies."],
+  zh:   ["", "你现在是一名初中生或高中生。", "时间过去了。你现在二十多岁到三十多岁，正在上大学或刚开始工作。", "又过了许多年。你正在经历四十多岁到七十多岁的人生。"],
+};
 let LANG = "ko";
 const LT = () => LANGS[LANG];
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => v && k in v ? v[k] : "{" + k + "}");
@@ -1448,8 +1456,7 @@ async function printReceipt(sel){
   const copy = $(sel + " .receipt").cloneNode(true); copy.classList.remove("printing"); copy.removeAttribute("id");
   copy.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
   pa.innerHTML = ""; pa.appendChild(copy);
-  if (window.CPP300Printer) await window.CPP300Printer.print(copy, () => window.print());
-  else window.print();
+  window.print();
 }
 $("#printBirth").onclick = () => printReceipt("#receipt");
 $("#printEnd").onclick = () => printReceipt("#endArea");
@@ -1505,8 +1512,9 @@ function renderEvent(){
   $("#eventArea").innerHTML = tr + `<div class="panel stack">
     <div class="row"><span class="tag">${stage}단계 ${STAGES[stage]}</span></div>
     ${ev.role ? `<div class="rolebar">${T(ev.role === "actor" ? "actorBar" : "bystanderBar")}</div>` : ""}
+    <p class="stageintro"><b>${esc((STAGE_INTRO[LANG] || STAGE_INTRO.ko)[stage] || "")}</b></p>
     <h2>${esc(ev.title)}</h2>
-    <div class="note">스탭 대본 · 소리 내어 읽어 주세요${ko ? ` <span class="tag">${LANG_NAME[LANG]}</span>` : ""}</div>
+    <div class="note">스탭 대본 · 소리 내어 읽어 주세요 (위의 굵은 한 줄부터)${ko ? ` <span class="tag">${LANG_NAME[LANG]}</span>` : ""}</div>
     <div class="script">${esc(ev.script)}</div>
     ${ko ? `<details class="orig"><summary class="note">스탭용 한국어 원문</summary><div class="small">${esc(current.ev.title)} · ${esc(current.ev.script)}</div><ul class="clean small">${current.ev.choices.map(c => `<li><b>${c.k}</b> ${esc(c.label)}</li>`).join("")}</ul></details>` : ""}
     <!-- 참가자에게 보이는 화면: 작성자·ID·권리·주체·사유 태그는 넣지 않는다 (권리는 퀴즈 뒤 권리 카드에서) -->
@@ -1887,5 +1895,4 @@ const scenReady = Scenarios.load().then(() => { bankDone = false; renderSheet();
 })();
 
 </script>
-<script src="./serial-printer.js"></script>
 </html>
